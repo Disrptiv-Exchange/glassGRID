@@ -14,10 +14,27 @@
     placeholder="Find…"
     [value]="findQuery()"
     (input)="setFindQuery($any($event.target).value)"
-    aria-label="Find"
+    (keydown)="onFindKeyDown($event)"
+    aria-label="Find (Enter = next, Shift+Enter = previous)"
   />
   @if (findMatches().length) {
     <span class="gg-find-count" aria-live="polite">{{ findIndex() + 1 }} / {{ findMatches().length }}</span>
+    <button
+      type="button"
+      class="gg-find-nav"
+      (click)="findPrevMatch()"
+      aria-label="Previous match (Shift+Enter)"
+      title="Previous match (Shift+Enter)"
+      data-testid="find-prev"
+    >↑</button>
+    <button
+      type="button"
+      class="gg-find-nav"
+      (click)="findNextMatch()"
+      aria-label="Next match (Enter)"
+      title="Next match (Enter)"
+      data-testid="find-next"
+    >↓</button>
   }
   <span class="gg-spacer"></span>
   @if (hasSelection()) {

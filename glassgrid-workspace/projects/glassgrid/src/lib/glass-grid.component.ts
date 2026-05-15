@@ -1824,6 +1824,26 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     this.findIndex.set(matches.length ? 0 : -1);
     if (matches.length) this.scrollRowIntoView(matches[0]!.rowIndex);
   }
+  protected findNextMatch() {
+    const n = this.findMatches().length;
+    if (!n) return;
+    const next = (this.findIndex() + 1) % n;
+    this.findIndex.set(next);
+    this.scrollRowIntoView(this.findMatches()[next]!.rowIndex);
+  }
+  protected findPrevMatch() {
+    const n = this.findMatches().length;
+    if (!n) return;
+    const prev = (this.findIndex() - 1 + n) % n;
+    this.findIndex.set(prev);
+    this.scrollRowIntoView(this.findMatches()[prev]!.rowIndex);
+  }
+  protected onFindKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (e.shiftKey) this.findPrevMatch();
+    else this.findNextMatch();
+  }
 
   // ===== api builder =====
   private buildApi(): GridApi<TRow> {
