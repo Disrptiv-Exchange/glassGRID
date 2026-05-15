@@ -381,14 +381,18 @@
                         />
                       }
                     }
-                  } @else if (cellComponentType(col); as cmp) {
-                    <ng-container
-                      *ngComponentOutlet="cmp; inputs: cellComponentInputs(col, entry.row.node)"
-                    />
-                  } @else if (cellRendererHtml(col, entry.row.node); as html) {
-                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
                   } @else {
-                    <span class="gg-cell-text">{{ cellText(col, entry.row.node) }}</span>
+                    @if (cellComponentType(col); as cmp) {
+                      <ng-container
+                        *ngComponentOutlet="cmp; inputs: cellComponentInputs(col, entry.row.node)"
+                      />
+                    } @else {
+                      @if (cellRendererHtml(col, entry.row.node); as html) {
+                        <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                      } @else {
+                        <span class="gg-cell-text">{{ cellText(col, entry.row.node) }}</span>
+                      }
+                    }
                   }
                 </div>
               }
