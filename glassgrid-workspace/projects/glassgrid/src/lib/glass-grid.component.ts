@@ -1402,13 +1402,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         disabled: !cur,
         action: () => this.api.setSortModel(this.sortModel().filter((s) => s.colId !== colId)) },
     ];
-    if (!lockPin) {
-      items.push({ separator: true, name: '' });
-      if (isLeft) {
-        items.push({ name: 'Unpin', action: () => this.api.setColumnPinned(colId, null) });
-      } else {
-        items.push({ name: 'Pin left', action: () => this.api.setColumnPinned(colId, 'left') });
-      }
+    items.push({ separator: true, name: '' });
+    if (lockPin) {
+      // Locked: show the current state as a disabled entry so the user can see
+      // the column IS / IS NOT pinned without offering an action.
+      items.push({
+        name: isLeft ? 'Unpin (locked)' : 'Pin left (locked)',
+        disabled: true,
+      });
+    } else if (isLeft) {
+      items.push({ name: 'Unpin', action: () => this.api.setColumnPinned(colId, null) });
+    } else {
+      items.push({ name: 'Pin left', action: () => this.api.setColumnPinned(colId, 'left') });
     }
     items.push({ separator: true, name: '' });
     items.push({ name: 'Hide column',
