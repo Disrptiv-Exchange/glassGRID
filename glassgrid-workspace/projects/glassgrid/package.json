@@ -1,6 +1,6 @@
 {
   "name": "@disrptiv-exchange/glassgrid",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight Angular data grid — signal-native, tree-shakeable, themeable. 49 KB gzipped with the full feature surface.",
   "keywords": [
     "angular",
@@ -23,8 +23,8 @@
   },
   "homepage": "https://github.com/Disrptiv-Exchange/glassGRID#readme",
   "peerDependencies": {
-    "@angular/common": ">=17.0.0",
-    "@angular/core": ">=17.0.0"
+    "@angular/common": ">=20.0.0 <22.0.0",
+    "@angular/core": ">=20.0.0 <22.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"

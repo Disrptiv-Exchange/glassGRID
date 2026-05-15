@@ -306,6 +306,24 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   protected readonly filterPopupAnchor = signal<{ top: number; left: number } | null>(null);
   protected readonly draftFilter = signal<FilterModelItem>({ type: 'contains', filter: '' });
 
+  protected setDraftFilterType(type: FilterOp) {
+    this.draftFilter.set({ ...this.draftFilter(), type });
+  }
+  protected setDraftFilterValue(filter: string | number | null) {
+    this.draftFilter.set({ ...this.draftFilter(), filter });
+  }
+  protected setDraftFilterTo(filterTo: string | number | null) {
+    this.draftFilter.set({ ...this.draftFilter(), filterTo });
+  }
+
+  protected hasAnyFloatingFilter(): boolean {
+    return this.renderColumns().some(c => c.colDef.floatingFilter === true);
+  }
+  protected findColumnById(colId: string | null): ResolvedColumn<TRow> | undefined {
+    if (!colId) return undefined;
+    return this.columnsWithState().find(c => c.colId === colId);
+  }
+
   // editing
   protected readonly editingCell = signal<EditState | null>(null);
   private readonly undoStack: UndoEntry[] = [];

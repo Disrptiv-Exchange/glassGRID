@@ -161,7 +161,7 @@
     </div>
 
     <!-- floating filter row -->
-    @if (renderColumns().some(c => c.colDef.floatingFilter)) {
+    @if (hasAnyFloatingFilter()) {
       <div class="gg-floating-filter-row"
         [style.width.px]="totalContentWidth()"
         [style.transform]="'translateX(' + (-scrollLeft()) + 'px)'">
@@ -521,7 +521,7 @@
 
 <!-- column filter popup -->
 @if (openFilterColId(); as filterColId) {
-  @if (columnsWithState().find(c => c.colId === filterColId); as filterCol) {
+  @if (findColumnById(filterColId); as filterCol) {
     <div class="gg-filter-popup"
       (click)="$event.stopPropagation()"
       [style.top.px]="filterPopupAnchor()?.top ?? 80"
@@ -529,7 +529,7 @@
       [style.right.px]="filterPopupAnchor() ? null : 20">
       <h4 class="gg-filter-title">Filter · {{ filterCol.headerName }}</h4>
       <label class="gg-filter-row">
-        <select [ngModel]="draftFilter().type" (ngModelChange)="draftFilter.set({ ...draftFilter(), type: $event })">
+        <select [ngModel]="draftFilter().type" (ngModelChange)="setDraftFilterType($event)">
           @for (op of filterOpsFor(filterCol); track op) {
             <option [ngValue]="op">{{ filterOpLabel(op) }}</option>
           }
@@ -539,7 +539,7 @@
         <input
           [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
           [ngModel]="draftFilter().filter"
-          (ngModelChange)="draftFilter.set({ ...draftFilter(), filter: $event })"
+          (ngModelChange)="setDraftFilterValue($event)"
           placeholder="value"
         />
       </label>
@@ -548,7 +548,7 @@
           <input
             [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
             [ngModel]="draftFilter().filterTo"
-            (ngModelChange)="draftFilter.set({ ...draftFilter(), filterTo: $event })"
+            (ngModelChange)="setDraftFilterTo($event)"
             placeholder="to"
           />
         </label>
