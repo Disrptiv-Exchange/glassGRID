@@ -1,12 +1,37 @@
 {
-  "name": "glassgrid",
-  "version": "0.0.1",
+  "name": "@disrptiv-exchange/glassgrid",
+  "version": "0.1.0",
+  "description": "Lightweight Angular data grid — signal-native, tree-shakeable, themeable. 49 KB gzipped with the full feature surface.",
+  "keywords": [
+    "angular",
+    "data-grid",
+    "datagrid",
+    "table",
+    "signals",
+    "tree-shakeable",
+    "ag-grid",
+    "virtual-scroll"
+  ],
+  "author": "Disrptiv Exchange",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Disrptiv-Exchange/glassGRID.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Disrptiv-Exchange/glassGRID/issues"
+  },
+  "homepage": "https://github.com/Disrptiv-Exchange/glassGRID#readme",
   "peerDependencies": {
-    "@angular/common": "^21.2.0",
-    "@angular/core": "^21.2.0"
+    "@angular/common": ">=17.0.0",
+    "@angular/core": ">=17.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  }
 }

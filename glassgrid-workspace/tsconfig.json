@@ -7,6 +7,9 @@
     "paths": {
       "glassgrid": [
         "./projects/glassgrid/src/public-api.ts"
+      ],
+      "@disrptiv-exchange/glassgrid": [
+        "./projects/glassgrid/src/public-api.ts"
       ]
     },
     "noImplicitOverride": true,

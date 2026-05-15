@@ -21,15 +21,42 @@ A modern, lightweight Angular data grid. Signal-native, tree-shakeable, themeabl
 
 ---
 
+## Installation
+
+glassGRID is published to **GitHub Packages** as a private scoped package. To install it in a consumer project:
+
+**1. Create a `.npmrc` in your project root** (template at [`.npmrc.example`](.npmrc.example)):
+
+```
+@disrptiv-exchange:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+**2. Set `GITHUB_TOKEN`** to a personal access token with `read:packages` scope (create one at https://github.com/settings/tokens):
+
+```bash
+export GITHUB_TOKEN=ghp_xxx
+```
+
+**3. Install:**
+
+```bash
+npm install @disrptiv-exchange/glassgrid
+```
+
+That's it — from this point on it behaves like any other npm dependency. Gitignore your `.npmrc` if it contains a hard-coded token (the template uses `${GITHUB_TOKEN}` so it's safe to commit).
+
+---
+
 ## Quick start
 
 ```bash
-npm install glassgrid
+npm install @disrptiv-exchange/glassgrid
 ```
 
 ```typescript
 import { Component, signal } from '@angular/core';
-import { GlassGridComponent, type ColumnDef } from 'glassgrid';
+import { GlassGridComponent, type ColumnDef } from '@disrptiv-exchange/glassgrid';
 
 interface Person {
   id: number;
@@ -74,7 +101,7 @@ Add the theme stylesheet to your global styles:
 
 ```scss
 // styles.scss
-@import "glassgrid/themes/quartz.scss";
+@import "@disrptiv-exchange/glassgrid/themes/quartz.scss";
 ```
 
 That's the entire setup. No `NgModule`, no `providers`, no `forRoot()`.
@@ -139,7 +166,7 @@ That's the entire setup. No `NgModule`, no `providers`, no `forRoot()`.
 Browsers: all evergreen Chromium / Firefox / Safari from the last 2 years.
 
 ```bash
-npm install glassgrid
+npm install @disrptiv-exchange/glassgrid
 ```
 
 The library carries **no transitive runtime deps** outside `tslib`. Peer deps are `@angular/core` and `@angular/common`.
