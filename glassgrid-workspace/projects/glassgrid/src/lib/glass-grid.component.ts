@@ -306,6 +306,30 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   protected readonly filterPopupAnchor = signal<{ top: number; left: number } | null>(null);
   protected readonly draftFilter = signal<FilterModelItem>({ type: 'contains', filter: '' });
 
+  // hidden-columns popup (opens from the toolbar button when columns are hidden)
+  protected readonly hiddenColsPopupAnchor = signal<{ top: number; left: number } | null>(null);
+  protected readonly hiddenColumns = computed(() =>
+    this.columnsWithState().filter((c) => c.hide && !c.colDef.lockVisible),
+  );
+  protected toggleHiddenColsPopup(ev: MouseEvent) {
+    ev.stopPropagation();
+    if (this.hiddenColsPopupAnchor()) { this.hiddenColsPopupAnchor.set(null); return; }
+    const hostRect = this.el.nativeElement.getBoundingClientRect();
+    const btn = ev.currentTarget as HTMLElement;
+    const r = btn.getBoundingClientRect();
+    this.hiddenColsPopupAnchor.set({
+      top: r.bottom - hostRect.top + 4,
+      left: Math.max(8, r.left - hostRect.left),
+    });
+  }
+  protected closeHiddenColsPopup() { this.hiddenColsPopupAnchor.set(null); }
+  protected showAllHiddenColumns() {
+    for (const c of this.hiddenColumns()) this.api.setColumnVisible(c.colId, true);
+  }
+  protected unhideColumn(colId: string) {
+    this.api.setColumnVisible(colId, true);
+  }
+
   protected setDraftFilterType(type: FilterOp) {
     this.draftFilter.set({ ...this.draftFilter(), type });
   }
@@ -1367,7 +1391,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     const lockVis = !!col.colDef.lockVisible;
     const isLeft = col.pinned === 'left';
     const cur = this.sortModel().find((s) => s.colId === colId);
-    const hidden = this.columnsWithState().filter((c) => c.hide);
     const items: ContextMenuItem<TRow>[] = [
       { name: cur?.sort === 'asc' ? '✓ Sort ascending' : 'Sort ascending',
         disabled: !col.sortable,
@@ -1391,20 +1414,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     items.push({ name: 'Hide column',
       disabled: lockVis,
       action: () => this.api.setColumnVisible(colId, false) });
-    if (hidden.length) {
-      items.push({ separator: true, name: '' });
-      items.push({
-        name: `Show all hidden columns (${hidden.length})`,
-        action: () => { for (const h of hidden) this.api.setColumnVisible(h.colId, true); },
-      });
-      for (const h of hidden) {
-        const label = h.colDef.headerName || h.colDef.field || h.colId;
-        items.push({
-          name: `  Show: ${label}`,
-          action: () => this.api.setColumnVisible(h.colId, true),
-        });
-      }
-    }
+    // Unhide flow lives on the toolbar's "Show hidden columns" button when
+    // there are hidden columns — not in this per-column menu.
     return items;
   }
   invokeContextMenu(item: ContextMenuItem<TRow>) {

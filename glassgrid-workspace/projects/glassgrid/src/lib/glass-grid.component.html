@@ -36,6 +36,16 @@
       data-testid="find-next"
     >↓</button>
   }
+  @if (hiddenColumns().length) {
+    <button
+      type="button"
+      class="gg-show-hidden-btn"
+      (click)="toggleHiddenColsPopup($event)"
+      [class.gg-active]="hiddenColsPopupAnchor() !== null"
+      aria-label="Show hidden columns"
+      data-testid="show-hidden-btn"
+    >Show Hidden Columns ({{ hiddenColumns().length }})</button>
+  }
   <span class="gg-spacer"></span>
   @if (hasSelection()) {
     <span class="gg-selection-count" aria-live="polite">
@@ -610,5 +620,43 @@
   </div>
 }
 
+<!-- hidden columns popup -->
+@if (hiddenColsPopupAnchor(); as a) {
+  <div
+    class="gg-hidden-cols-popup"
+    role="dialog"
+    aria-label="Show hidden columns"
+    [style.top.px]="a.top"
+    [style.left.px]="a.left"
+    (click)="$event.stopPropagation()"
+    data-testid="hidden-cols-popup"
+  >
+    <header class="gg-hidden-cols-header">
+      <span>Show hidden columns</span>
+      <button type="button" class="gg-hidden-cols-close" (click)="closeHiddenColsPopup()" aria-label="Close">×</button>
+    </header>
+    <button
+      type="button"
+      class="gg-hidden-cols-all"
+      (click)="showAllHiddenColumns()"
+      data-testid="show-all-hidden"
+    >Show all ({{ hiddenColumns().length }})</button>
+    <hr class="gg-menu-separator" />
+    <div class="gg-hidden-cols-list">
+      @for (c of hiddenColumns(); track c.colId) {
+        <label class="gg-hidden-cols-item">
+          <input
+            type="checkbox"
+            class="gg-checkbox"
+            [checked]="false"
+            (change)="unhideColumn(c.colId)"
+          />
+          <span>{{ c.headerName || c.field || c.colId }}</span>
+        </label>
+      }
+    </div>
+  </div>
+}
+
 <!-- click-away handler to close popups -->
-<div class="gg-click-away" (click)="closeContextMenu(); openFilterColId.set(null)"></div>
+<div class="gg-click-away" (click)="closeContextMenu(); openFilterColId.set(null); closeHiddenColsPopup()"></div>
