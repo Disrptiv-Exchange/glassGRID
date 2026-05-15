@@ -1360,7 +1360,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     const lockVis = !!col.colDef.lockVisible;
     const isLeft = col.pinned === 'left';
     const cur = this.sortModel().find((s) => s.colId === colId);
-    return [
+    const hidden = this.columnsWithState().filter((c) => c.hide);
+    const items: ContextMenuItem<TRow>[] = [
       { name: cur?.sort === 'asc' ? '✓ Sort ascending' : 'Sort ascending',
         disabled: !col.sortable,
         action: () => this.api.setSortModel([{ colId, sort: 'asc' }]) },
@@ -1378,17 +1379,25 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         disabled: lockPin || !isLeft,
         action: () => this.api.setColumnPinned(colId, null) },
       { separator: true, name: '' },
-      { name: 'Auto-size this column',
-        action: () => this.api.autoSizeColumn(colId) },
-      { name: 'Auto-size all columns',
-        action: () => this.api.autoSizeAllColumns() },
-      { name: 'Size columns to fit',
-        action: () => this.api.sizeColumnsToFit() },
-      { separator: true, name: '' },
       { name: 'Hide column',
         disabled: lockVis,
         action: () => this.api.setColumnVisible(colId, false) },
     ];
+    if (hidden.length) {
+      items.push({ separator: true, name: '' });
+      items.push({
+        name: `Show all hidden columns (${hidden.length})`,
+        action: () => { for (const h of hidden) this.api.setColumnVisible(h.colId, true); },
+      });
+      for (const h of hidden) {
+        const label = h.colDef.headerName || h.colDef.field || h.colId;
+        items.push({
+          name: `  Show: ${label}`,
+          action: () => this.api.setColumnVisible(h.colId, true),
+        });
+      }
+    }
+    return items;
   }
   invokeContextMenu(item: ContextMenuItem<TRow>) {
     const cm = this.contextMenu();
