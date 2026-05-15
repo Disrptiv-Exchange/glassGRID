@@ -1,0 +1,593 @@
+<!-- toolbar -->
+<div class="gg-toolbar" role="toolbar">
+  <input
+    type="search"
+    class="gg-quick-filter"
+    [placeholder]="t()('quickFilter')"
+    [value]="quickFilterText() || internalQuickFilter()"
+    (input)="onQuickFilterInput($any($event.target).value)"
+    [attr.aria-label]="t()('quickFilter')"
+  />
+  <input
+    type="search"
+    class="gg-find-input"
+    placeholder="Find…"
+    [value]="findQuery()"
+    (input)="setFindQuery($any($event.target).value)"
+    aria-label="Find"
+  />
+  @if (findMatches().length) {
+    <span class="gg-find-count" aria-live="polite">{{ findIndex() + 1 }} / {{ findMatches().length }}</span>
+  }
+  <span class="gg-spacer"></span>
+  @if (hasSelection()) {
+    <span class="gg-selection-count" aria-live="polite">
+      {{ api.getSelectedRows().length }} {{ t()('selected') }}
+    </span>
+  }
+  @if (sideBar()) {
+    <button type="button" class="gg-sidebar-toggle" (click)="sideBarVisible.set(!sideBarVisible())">
+      ☰
+    </button>
+  }
+</div>
+
+<!-- main layout: grid (header + body + pagination) + optional side bar -->
+<div class="gg-layout">
+
+  <div class="gg-main">
+
+    <!-- column-group header rows (one per group level, top down) -->
+    @for (level of headerTree().levels; track $index) {
+      <div class="gg-header gg-header-groups" [style.height.px]="headerHeight()">
+        <div class="gg-header-cells" [style.width.px]="totalContentWidth()">
+          @for (g of level.groups; track g.groupId) {
+            <div
+              class="gg-header-cell gg-header-group-cell"
+              [ngClass]="g.headerClass ?? ''"
+              [style.width.px]="groupSpanWidth(g)"
+              [style.min-width.px]="groupSpanWidth(g)"
+            >
+              <button
+                type="button"
+                class="gg-group-collapse-btn"
+                (click)="api.setColumnGroupOpened(g.groupId, !g.open)"
+                [attr.aria-expanded]="g.open"
+              >{{ g.open ? '⏷' : '⏵' }}</button>
+              <span class="gg-header-label">{{ g.headerName }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- left pin drop zone (only visible while dragging a column) -->
+    @if (draggingCol()) {
+      <div
+        class="gg-pin-zone gg-pin-zone-left"
+        [class.gg-pin-zone-hot]="pinZoneHot()"
+        data-testid="pin-zone-left"
+        (dragover)="onPinZoneDragOver($event)"
+        (dragleave)="onPinZoneDragLeave()"
+        (drop)="onPinZoneDrop($event)"
+      >
+        <span class="gg-pin-zone-label">📌 Drop to pin left</span>
+      </div>
+    }
+
+    <!-- header -->
+    <div
+      class="gg-header"
+      role="row"
+      [style.height.px]="headerHeight()"
+      (pointermove)="onResizeMove($event)"
+      (pointerup)="onResizeEnd($event)"
+    >
+      <div class="gg-header-cells"
+           [style.width.px]="totalContentWidth()"
+           [style.transform]="'translateX(' + (-scrollLeft()) + 'px)'"
+           [class.gg-col-virt]="!suppressColumnVirtualisation()">
+        @for (col of renderedColumns(); track trackByCol($index, col); let i = $index) {
+          <div
+            class="gg-header-cell"
+            role="columnheader"
+            [attr.aria-colindex]="i + 1"
+            [attr.aria-sort]="sortIndicator(col).dir === 'asc' ? 'ascending' : sortIndicator(col).dir === 'desc' ? 'descending' : 'none'"
+            [class.gg-sortable]="col.sortable"
+            [class.gg-dragging]="draggingCol()?.colId === col.colId"
+            [class.gg-drop-target]="draggingCol() && draggingCol()?.overColId === col.colId"
+            [class.gg-pinned-left]="col.pinned === 'left'"
+            [class.gg-pinned-right]="col.pinned === 'right'"
+            [class.gg-pinned-edge-left]="col.isLeftPinnedEdge"
+            [class.gg-pinned-edge-right]="col.isRightPinnedEdge"
+            [class.gg-filter-active]="isFilterActive(col)"
+            [style.width.px]="col.computedWidth"
+            [style.min-width.px]="col.computedWidth"
+            [style.left.px]="col.pinned === 'left' || !suppressColumnVirtualisation() ? col.left : null"
+            [style.position]="col.pinned ? null : (suppressColumnVirtualisation() ? null : 'absolute')"
+            [style.transform]="col.pinned === 'left' ? 'translateX(' + scrollLeft() + 'px)' : null"
+            [attr.draggable]="!col.suppressMovable"
+            (click)="onHeaderClick(col, $event)"
+            (contextmenu)="onHeaderContextMenu(col, $event)"
+            (dragstart)="onHeaderDragStart(col, $event)"
+            (dragover)="onHeaderDragOver(col, $event)"
+            (drop)="onHeaderDrop(col, $event)"
+            (dragend)="onHeaderDragEnd()"
+            [title]="col.colDef.headerTooltip || col.headerName"
+          >
+            @if (col.colDef.headerCheckboxSelection) {
+              <input
+                type="checkbox"
+                class="gg-checkbox"
+                [checked]="allSelected()"
+                (click)="$event.stopPropagation()"
+                (change)="toggleHeaderCheckbox()"
+                aria-label="Select all rows"
+              />
+            }
+            @if (col.colDef.headerComponent) {
+              <span class="gg-header-label" [innerHTML]="headerHtml(col)"></span>
+            } @else {
+              <span class="gg-header-label">{{ col.headerName }}</span>
+            }
+            @if (sortIndicator(col).dir; as dir) {
+              <span class="gg-sort-indicator" [attr.data-dir]="dir">
+                {{ dir === 'asc' ? '▲' : '▼' }}
+                @if (sortIndicator(col).index; as idx) {
+                  <sub class="gg-sort-index">{{ idx }}</sub>
+                }
+              </span>
+            }
+            @if (col.colDef.filter) {
+              <button
+                type="button"
+                class="gg-filter-btn"
+                [class.gg-active]="isFilterActive(col)"
+                (click)="onFilterButtonClick(col, $event)"
+                [attr.aria-label]="'Filter ' + col.headerName"
+              >⏷</button>
+            }
+            @if (col.resizable) {
+              <span
+                class="gg-resize-handle"
+                (pointerdown)="onResizeStart(col, $event)"
+                (click)="$event.stopPropagation()"
+                aria-hidden="true"
+              ></span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- floating filter row -->
+    @if (renderColumns().some(c => c.colDef.floatingFilter)) {
+      <div class="gg-floating-filter-row"
+        [style.width.px]="totalContentWidth()"
+        [style.transform]="'translateX(' + (-scrollLeft()) + 'px)'">
+        @for (col of renderColumns(); track trackByCol($index, col)) {
+          <div class="gg-floating-filter-cell"
+            [class.gg-pinned-left]="col.pinned === 'left'"
+            [class.gg-pinned-edge-left]="col.isLeftPinnedEdge"
+            [style.width.px]="col.computedWidth"
+            [style.min-width.px]="col.computedWidth"
+            [style.left.px]="col.pinned === 'left' ? col.left : null"
+            [style.transform]="col.pinned === 'left' ? 'translateX(' + scrollLeft() + 'px)' : null"
+          >
+            @if (col.colDef.floatingFilter && col.colDef.filter) {
+              @if (floatingFilterComponentType(col); as cmp) {
+                <ng-container
+                  *ngComponentOutlet="cmp; inputs: floatingFilterComponentInputs(col)"
+                />
+              } @else {
+                <input
+                  type="text"
+                  class="gg-floating-filter-input"
+                  [value]="floatingFilterValue(col)"
+                  (input)="onFloatingFilterInput(col, $any($event.target).value)"
+                  [placeholder]="filterTypeFor(col) === 'number' ? '#' : filterTypeFor(col) === 'date' ? 'yyyy-mm-dd' : ''"
+                />
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- pinned top rows -->
+    @if (pinnedTopNodes().length) {
+      <div class="gg-pinned-top" role="rowgroup">
+        <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
+          @for (n of pinnedTopNodes(); track n.id) {
+            <div class="gg-row gg-row-pinned" role="row" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
+              @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
+                <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
+                  @if (cellRendererHtml(col, n); as html) {
+                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                  } @else {
+                    <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- body -->
+    <div
+      #viewport
+      class="gg-body"
+      role="rowgroup"
+      tabindex="0"
+      (scroll)="onBodyScroll($event)"
+      [attr.aria-busy]="loading() ? 'true' : null"
+    >
+      <div class="gg-body-canvas" [style.height.px]="bodyTotalHeight()" [style.width.px]="totalContentWidth()">
+        @for (entry of renderedRows(); track trackByRow($index, entry)) {
+          @if (isGroupRow(entry.row)) {
+            <div
+              class="gg-row gg-row-group"
+              role="row"
+              [attr.aria-rowindex]="entry.index + 1"
+              [attr.aria-expanded]="entry.row.group.expanded"
+              [style.height.px]="entry.height"
+              [style.transform]="'translateY(' + entry.offset + 'px)'"
+              [style.width.px]="totalContentWidth()"
+              (click)="toggleGroup(entry.row.group)"
+            >
+              @for (col of renderedColumns(); track trackByCol($index, col)) {
+                <div
+                  role="gridcell"
+                  class="gg-cell"
+                  [style.width.px]="col.computedWidth"
+                  [style.min-width.px]="col.computedWidth"
+                  [style.left.px]="col.pinned === 'left' || !suppressColumnVirtualisation() ? col.left : null"
+                  [style.position]="col.pinned ? null : (suppressColumnVirtualisation() ? null : 'absolute')"
+                  [class.gg-pinned-left]="col.pinned === 'left'"
+                  [class.gg-pinned-right]="col.pinned === 'right'"
+                  [class.gg-pinned-edge-left]="col.isLeftPinnedEdge"
+                  [class.gg-pinned-edge-right]="col.isRightPinnedEdge"
+                >
+                  @if (col.colId === '_autoGroup') {
+                    <span class="gg-group-toggle" [style.padding-left.px]="entry.row.group.level * 16">
+                      <span class="gg-group-icon">{{ entry.row.group.expanded ? '▾' : '▸' }}</span>
+                      <span class="gg-group-key">{{ entry.row.group.groupKey ?? '(blank)' }}</span>
+                      <span class="gg-group-count">({{ entry.row.group.count }})</span>
+                    </span>
+                  } @else {
+                    <span class="gg-cell-text gg-group-agg">{{ groupCellText(col, entry.row.group) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (isDetailRow(entry.row)) {
+            <div
+              class="gg-row gg-row-detail"
+              role="row"
+              [style.height.px]="entry.height"
+              [style.transform]="'translateY(' + entry.offset + 'px)'"
+              [style.width.px]="totalContentWidth()"
+            >
+              <div class="gg-detail-content" [innerHTML]="detailHtml(entry.row)"></div>
+            </div>
+          } @else if (isLeafRow(entry.row) && entry.row.node) {
+            <div
+              class="gg-row"
+              role="row"
+              [attr.aria-rowindex]="entry.index + 1"
+              [attr.aria-selected]="entry.row.node.selected ? 'true' : null"
+              [class.gg-row-selected]="entry.row.node.selected"
+              [class.gg-row-odd]="entry.index % 2 === 1"
+              [class.gg-row-dragging]="rowDragSource()?.rowId === entry.row.node.id"
+              [class.gg-row-drop-target]="rowDragSource() && rowDragSource()?.overIndex === entry.index"
+              [style.height.px]="entry.height"
+              [style.transform]="'translateY(' + entry.offset + 'px)'"
+              [style.width.px]="totalContentWidth()"
+              [attr.draggable]="rowDragManaged() && !suppressRowDrag()"
+              (click)="onRowClick(entry.row.node, $event)"
+              (dblclick)="onRowDblClick(entry.row.node, $event)"
+              (dragstart)="onRowDragStart(entry.row.node, $event)"
+              (dragover)="onRowDragOver(entry.index, $event)"
+              (drop)="onRowDrop(entry.index, $event)"
+            >
+              @for (col of renderedColumns(); track trackByCol($index, col); let ci = $index) {
+                @let isEditing = editingCell()?.rowIndex === entry.index && editingCell()?.colId === col.colId;
+                <div
+                  role="gridcell"
+                  [attr.aria-colindex]="ci + 1"
+                  [ngClass]="cellClasses(col, entry.row.node)"
+                  [ngStyle]="cellStyles(col, entry.row.node)"
+                  [style.left.px]="col.pinned === 'left' || !suppressColumnVirtualisation() ? col.left : null"
+                  [style.position]="col.pinned ? null : (suppressColumnVirtualisation() ? null : 'absolute')"
+                  [class.gg-pinned-left]="col.pinned === 'left'"
+                  [class.gg-pinned-right]="col.pinned === 'right'"
+                  [class.gg-pinned-edge-left]="col.isLeftPinnedEdge"
+                  [class.gg-pinned-edge-right]="col.isRightPinnedEdge"
+                  [class.gg-cell-focused]="isCellFocused(entry.index, ci)"
+                  [class.gg-cell-range]="isCellInRange(entry.index, ci)"
+                  [class.gg-cell-editing]="isEditing"
+                  (click)="onCellClick(entry.row.node, col, entry.index, ci, $event)"
+                  (dblclick)="onCellDblClick(entry.row.node, col, entry.index, $event)"
+                  (contextmenu)="onCellContextMenu(entry.row.node, col, entry.index, $event)"
+                  (mouseenter)="onCellMouseEnter(entry.row.node, col, $event); onCellMouseEnterRange(entry.index, ci)"
+                  (mouseleave)="onCellMouseLeave(entry.row.node, col, $event)"
+                  (mousedown)="onCellMouseDown(entry.index, ci, $event)"
+                >
+                  @if (col.colDef.checkboxSelection) {
+                    <input
+                      type="checkbox"
+                      class="gg-checkbox"
+                      [checked]="entry.row.node.selected"
+                      (click)="$event.stopPropagation()"
+                      (change)="toggleRowCheckbox(entry.row.node, $event)"
+                      [attr.aria-label]="'Select row ' + (entry.index + 1)"
+                    />
+                  }
+                  @if (rowDragManaged() && ci === 0) {
+                    <span class="gg-row-drag-handle" aria-hidden="true">⋮⋮</span>
+                  }
+                  @if (col.colId === '_autoGroup' && masterDetail()) {
+                    <button type="button" class="gg-detail-toggle"
+                      (click)="$event.stopPropagation(); toggleDetail(entry.row.node.id)"
+                      [attr.aria-expanded]="isExpandedDetail(entry.row.node)"
+                    >{{ isExpandedDetail(entry.row.node) ? '▾' : '▸' }}</button>
+                  }
+                  @if (isEditing) {
+                    @switch (editorTypeFor(col)) {
+                      @case ('select') {
+                        <select
+                          #editor
+                          class="gg-cell-editor gg-cell-editor-select"
+                          (change)="commitEdit($any($event.target).value)"
+                          (blur)="onEditorBlur($any($event.target).value)"
+                          (keydown)="onEditorKeyDown($event, $any($event.target).value)"
+                          autofocus
+                        >
+                          @for (opt of selectOptions(col); track opt) {
+                            <option [value]="opt" [selected]="opt === editingCell()?.oldValue">{{ opt }}</option>
+                          }
+                        </select>
+                      }
+                      @case ('checkbox') {
+                        <input
+                          type="checkbox"
+                          class="gg-cell-editor"
+                          [checked]="!!editingCell()?.oldValue"
+                          (change)="commitEdit($any($event.target).checked ? 'true' : 'false')"
+                          autofocus
+                        />
+                      }
+                      @case ('largeText') {
+                        <textarea
+                          #editor
+                          class="gg-cell-editor gg-cell-editor-large"
+                          [value]="editorInitialValue()"
+                          (blur)="onEditorBlur($any($event.target).value)"
+                          (keydown)="onEditorKeyDown($event, $any($event.target).value)"
+                          autofocus
+                        ></textarea>
+                      }
+                      @default {
+                        <input
+                          #editor
+                          [type]="editorTypeFor(col) === 'number' ? 'number' : editorTypeFor(col) === 'date' ? 'date' : 'text'"
+                          class="gg-cell-editor"
+                          [value]="editorInitialValue()"
+                          (blur)="onEditorBlur($any($event.target).value)"
+                          (keydown)="onEditorKeyDown($event, $any($event.target).value)"
+                          autofocus
+                        />
+                      }
+                    }
+                  } @else if (cellComponentType(col); as cmp) {
+                    <ng-container
+                      *ngComponentOutlet="cmp; inputs: cellComponentInputs(col, entry.row.node)"
+                    />
+                  } @else if (cellRendererHtml(col, entry.row.node); as html) {
+                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                  } @else {
+                    <span class="gg-cell-text">{{ cellText(col, entry.row.node) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+
+      @if (loading() || loadingOverlayInternal()) {
+        <div class="gg-overlay gg-overlay-loading" role="status">
+          <div class="gg-overlay-content">{{ loadingMessage() }}</div>
+        </div>
+      } @else if (totalDisplayed() === 0) {
+        <div class="gg-overlay gg-overlay-empty" role="status">
+          <div class="gg-overlay-content">{{ noRowsMessage() }}</div>
+        </div>
+      }
+    </div>
+
+    <!-- pinned bottom rows -->
+    @if (pinnedBottomNodes().length) {
+      <div class="gg-pinned-bottom" role="rowgroup">
+        <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
+          @for (n of pinnedBottomNodes(); track n.id) {
+            <div class="gg-row gg-row-pinned" role="row" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
+              @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
+                <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
+                  @if (cellRendererHtml(col, n); as html) {
+                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                  } @else {
+                    <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- status bar -->
+    @if (statusBar()) {
+      <div class="gg-status-bar" role="status">
+        @for (p of statusBar()!.panels; track p) {
+          @switch (p) {
+            @case ('selected') { <span class="gg-status-cell">{{ api.getSelectedRows().length }} {{ t()('selected') }}</span> }
+            @case ('filtered') { <span class="gg-status-cell">{{ filteredNodes().length }} {{ t()('filtered') }}</span> }
+            @case ('total') { <span class="gg-status-cell">{{ nodes().length }} {{ t()('total') }}</span> }
+            @case ('sum') { <span class="gg-status-cell">Σ {{ statusAgg()?.['sum'] }}</span> }
+            @case ('avg') { <span class="gg-status-cell">x̄ {{ statusAgg()?.['avg'] }}</span> }
+            @case ('min') { <span class="gg-status-cell">min {{ statusAgg()?.['min'] }}</span> }
+            @case ('max') { <span class="gg-status-cell">max {{ statusAgg()?.['max'] }}</span> }
+          }
+        }
+      </div>
+    }
+
+    <!-- pagination -->
+    @if (pagination()) {
+      <div class="gg-pagination" role="navigation" aria-label="Pagination">
+        @if (paginationPageSizeSelector() !== false) {
+          <label class="gg-page-size">
+            {{ t()('pageSize') }}
+            <select
+              [ngModel]="api.paginationGetPageSize()"
+              (ngModelChange)="onPageSizeChange($event)"
+            >
+              @for (size of $any(paginationPageSizeSelector()); track size) {
+                <option [ngValue]="size">{{ size }}</option>
+              }
+            </select>
+          </label>
+        }
+        <span class="gg-page-info" aria-live="polite">
+          {{ t()('page') }} {{ api.paginationGetCurrentPage() + 1 }} {{ t()('of') }} {{ api.paginationGetTotalPages() }}
+          ·
+          {{ totalDisplayed() }} {{ t()('rows') }}
+        </span>
+        <button type="button" class="gg-page-btn" (click)="paginationFirst()" [disabled]="api.paginationGetCurrentPage() === 0" [attr.aria-label]="t()('firstPage')">«</button>
+        <button type="button" class="gg-page-btn" (click)="paginationPrev()" [disabled]="api.paginationGetCurrentPage() === 0" [attr.aria-label]="t()('prevPage')">‹</button>
+        <button type="button" class="gg-page-btn" (click)="paginationNext()" [disabled]="api.paginationGetCurrentPage() >= api.paginationGetTotalPages() - 1" [attr.aria-label]="t()('nextPage')">›</button>
+        <button type="button" class="gg-page-btn" (click)="paginationLast()" [disabled]="api.paginationGetCurrentPage() >= api.paginationGetTotalPages() - 1" [attr.aria-label]="t()('lastPage')">»</button>
+      </div>
+    }
+  </div>
+
+  <!-- side bar -->
+  @if (sideBar() && sideBarVisible()) {
+    <aside class="gg-sidebar" role="complementary">
+      <nav class="gg-sidebar-tabs">
+        @for (p of $any(sideBar()).toolPanels; track p.id) {
+          <button type="button"
+            class="gg-sidebar-tab"
+            [class.gg-active]="openToolPanelId() === p.id"
+            (click)="openToolPanelId.set(openToolPanelId() === p.id ? null : p.id)"
+          >{{ p.labelDefault }}</button>
+        }
+      </nav>
+      @if (openToolPanelId() === 'columns') {
+        <div class="gg-tool-panel gg-tool-panel-columns">
+          <h3>{{ t()('columns') }}</h3>
+          @for (c of columnsWithState(); track c.colId) {
+            <label class="gg-toolpanel-row">
+              <input type="checkbox" [checked]="!c.hide" (change)="api.setColumnVisible(c.colId, $any($event.target).checked)" />
+              <span>{{ c.headerName }}</span>
+            </label>
+          }
+        </div>
+      }
+      @if (openToolPanelId() === 'filters') {
+        <div class="gg-tool-panel gg-tool-panel-filters">
+          <h3>{{ t()('filters') }}</h3>
+          @for (c of columnsWithState(); track c.colId) {
+            @if (c.colDef.filter) {
+              <div class="gg-toolpanel-filter">
+                <strong>{{ c.headerName }}</strong>
+                <input type="text"
+                  [value]="floatingFilterValue(c)"
+                  (input)="onFloatingFilterInput(c, $any($event.target).value)"
+                  placeholder="filter…"
+                />
+              </div>
+            }
+          }
+        </div>
+      }
+    </aside>
+  }
+</div>
+
+<!-- column filter popup -->
+@if (openFilterColId(); as filterColId) {
+  @if (columnsWithState().find(c => c.colId === filterColId); as filterCol) {
+    <div class="gg-filter-popup"
+      (click)="$event.stopPropagation()"
+      [style.top.px]="filterPopupAnchor()?.top ?? 80"
+      [style.left.px]="filterPopupAnchor()?.left ?? null"
+      [style.right.px]="filterPopupAnchor() ? null : 20">
+      <h4 class="gg-filter-title">Filter · {{ filterCol.headerName }}</h4>
+      <label class="gg-filter-row">
+        <select [ngModel]="draftFilter().type" (ngModelChange)="draftFilter.set({ ...draftFilter(), type: $event })">
+          @for (op of filterOpsFor(filterCol); track op) {
+            <option [ngValue]="op">{{ filterOpLabel(op) }}</option>
+          }
+        </select>
+      </label>
+      <label class="gg-filter-row">
+        <input
+          [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
+          [ngModel]="draftFilter().filter"
+          (ngModelChange)="draftFilter.set({ ...draftFilter(), filter: $event })"
+          placeholder="value"
+        />
+      </label>
+      @if (draftFilter().type === 'inRange') {
+        <label class="gg-filter-row">
+          <input
+            [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
+            [ngModel]="draftFilter().filterTo"
+            (ngModelChange)="draftFilter.set({ ...draftFilter(), filterTo: $event })"
+            placeholder="to"
+          />
+        </label>
+      }
+      <div class="gg-filter-actions">
+        <button type="button" (click)="clearFilter(filterCol)">{{ t()('filterClear') }}</button>
+        <button type="button" class="primary" (click)="applyDraftFilter(filterCol)">{{ t()('filterApply') }}</button>
+      </div>
+    </div>
+  }
+}
+
+<!-- context menu -->
+@if (contextMenu(); as cm) {
+  <div
+    class="gg-context-menu"
+    role="menu"
+    [style.left.px]="cm.x"
+    [style.top.px]="cm.y"
+    (click)="$event.stopPropagation()"
+  >
+    @for (item of computedContextMenuItems(); track trackByCtx($index, item)) {
+      @if (item.separator) {
+        <hr class="gg-menu-separator" />
+      } @else {
+        <button
+          type="button"
+          class="gg-menu-item"
+          [disabled]="item.disabled"
+          (click)="invokeContextMenu(item)"
+          role="menuitem"
+        >
+          {{ item.name }}
+          @if (item.shortcut) { <span class="gg-menu-shortcut">{{ item.shortcut }}</span> }
+        </button>
+      }
+    }
+  </div>
+}
+
+<!-- click-away handler to close popups -->
+<div class="gg-click-away" (click)="closeContextMenu(); openFilterColId.set(null)"></div>

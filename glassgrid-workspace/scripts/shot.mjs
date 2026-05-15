@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const CHROME = '/Users/nimishdesai/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const b = await chromium.launch({ executablePath: CHROME, headless: true });
+const ctx = await b.newContext({ viewport: { width: 1500, height: 900 } });
+const p = await ctx.newPage();
+const route = process.argv[2] ?? '/';
+await p.goto('http://localhost:4200' + route, { waitUntil: 'networkidle' });
+await p.waitForTimeout(800);
+await p.screenshot({ path: 'docs/screenshots/glassrun-' + (route.replace(/\//g,'') || 'home') + '.png', fullPage: false });
+await b.close();

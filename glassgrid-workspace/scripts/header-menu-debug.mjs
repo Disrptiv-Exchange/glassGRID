@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+const CHROME = '/Users/nimishdesai/Library/Caches/ms-playwright/chromium-1208/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
+const b = await chromium.launch({ executablePath: CHROME, headless: true });
+const ctx = await b.newContext({ viewport: { width: 1500, height: 900 } });
+const p = await ctx.newPage();
+p.on('console', m => console.log('C', m.type(), m.text()));
+p.on('pageerror', e => console.log('PE', e.message));
+await p.goto('http://localhost:4200/columns', { waitUntil: 'networkidle' });
+await p.waitForTimeout(400);
+const grid = p.locator('[data-testid="columns-grid"]');
+const nameHeader = grid.locator('.gg-header-cell').filter({ hasText: 'Name' }).first();
+await nameHeader.click({ button: 'right' });
+await p.waitForTimeout(200);
+const items = await p.locator('.gg-context-menu button.gg-menu-item').allTextContents();
+console.log('menu items:', JSON.stringify(items, null, 2));
+await b.close();

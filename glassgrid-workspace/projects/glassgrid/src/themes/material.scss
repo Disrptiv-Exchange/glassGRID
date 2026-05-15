@@ -1,0 +1,37 @@
+// glassGRID Material theme.
+// Apply by adding class "gg-theme-material" to the host.
+
+glass-grid.gg-theme-material {
+  --gg-bg: #ffffff;
+  --gg-fg: #212121;
+  --gg-muted-fg: #757575;
+  --gg-border: rgba(0, 0, 0, 0.12);
+  --gg-header-bg: #ffffff;
+  --gg-header-fg: #212121;
+  --gg-row-hover-bg: rgba(0, 0, 0, 0.04);
+  --gg-row-odd-bg: rgba(0, 0, 0, 0.015);
+  --gg-row-selected-bg: rgba(33, 150, 243, 0.10);
+  --gg-accent: #2196f3;
+  --gg-focus-ring: rgba(33, 150, 243, 0.32);
+  --gg-overlay-bg: rgba(255, 255, 255, 0.8);
+  --gg-flash-color: rgba(255, 235, 59, 0.5);
+  --gg-find-color: rgba(255, 235, 59, 0.55);
+  --gg-row-height: 48px;
+  --gg-header-height: 56px;
+  --gg-border-radius: 4px;
+  --gg-font: 14px/1.5 "Roboto", system-ui, -apple-system, sans-serif;
+  --gg-cell-padding-x: 16px;
+}
+
+glass-grid.gg-theme-material.gg-dark {
+  --gg-bg: #303030;
+  --gg-fg: #ffffff;
+  --gg-muted-fg: #bdbdbd;
+  --gg-border: rgba(255, 255, 255, 0.12);
+  --gg-header-bg: #424242;
+  --gg-header-fg: #ffffff;
+  --gg-row-hover-bg: rgba(255, 255, 255, 0.06);
+  --gg-row-odd-bg: rgba(255, 255, 255, 0.02);
+  --gg-row-selected-bg: rgba(33, 150, 243, 0.20);
+  --gg-overlay-bg: rgba(48, 48, 48, 0.8);
+}

@@ -1,0 +1,49 @@
+<div class="shell" [ngClass]="{ 'shell-dark': dark() }">
+  <header class="shell-header">
+    <a routerLink="/" class="brand">glass<strong>GRID</strong> · demo</a>
+    <nav class="nav">
+      <a routerLink="/basic" routerLinkActive="active">Basic</a>
+      <a routerLink="/sorting" routerLinkActive="active">Sorting</a>
+      <a routerLink="/filtering" routerLinkActive="active">Filtering</a>
+      <a routerLink="/pagination" routerLinkActive="active">Pagination</a>
+      <a routerLink="/selection" routerLinkActive="active">Selection</a>
+      <a routerLink="/columns" routerLinkActive="active">Columns</a>
+      <a routerLink="/rendering" routerLinkActive="active">Rendering</a>
+      <a routerLink="/themes" routerLinkActive="active">Themes</a>
+      <a routerLink="/performance" routerLinkActive="active">Performance</a>
+      <a routerLink="/editing" routerLinkActive="active">Editing</a>
+      <a routerLink="/advanced-filtering" routerLinkActive="active">Adv. filter</a>
+      <a routerLink="/grouping" routerLinkActive="active">Grouping</a>
+      <a routerLink="/tree" routerLinkActive="active">Tree</a>
+      <a routerLink="/master-detail" routerLinkActive="active">Master/Detail</a>
+      <a routerLink="/range" routerLinkActive="active">Range</a>
+      <a routerLink="/row-drag" routerLinkActive="active">Row drag</a>
+      <a routerLink="/sidebar-statusbar" routerLinkActive="active">Side/Status</a>
+      <a routerLink="/sparklines" routerLinkActive="active">Sparklines</a>
+      <a routerLink="/export-state" routerLinkActive="active">Export/State</a>
+      <a routerLink="/api-extras" routerLinkActive="active">API extras</a>
+      <a routerLink="/pinned-rows" routerLinkActive="active">Pinned rows</a>
+      <a routerLink="/column-groups" routerLinkActive="active">Col groups</a>
+      <a routerLink="/pivot" routerLinkActive="active">Pivot</a>
+      <a routerLink="/server-side" routerLinkActive="active">Server-side</a>
+      <a routerLink="/set-filter" routerLinkActive="active">Set filter</a>
+      <a routerLink="/advanced-filter-builder" routerLinkActive="active">Filter builder</a>
+      <a routerLink="/wrap-text" routerLinkActive="active">Wrap text</a>
+      <a routerLink="/lock" routerLinkActive="active">Locks</a>
+      <a routerLink="/span" routerLinkActive="active">Spans</a>
+      <a routerLink="/column-virt" routerLinkActive="active">Col virt</a>
+      <a routerLink="/charts" routerLinkActive="active">Charts</a>
+      <a routerLink="/infinite" routerLinkActive="active">Infinite</a>
+      <a routerLink="/multi-filter" routerLinkActive="active">Multi-filter</a>
+      <a routerLink="/cell-components" routerLinkActive="active">Cell components</a>
+      <a routerLink="/ag-binding" routerLinkActive="active">ag-binding</a>
+      <a routerLink="/floating-filter-component" routerLinkActive="active">Floating filter cmp</a>
+    </nav>
+    <button type="button" class="dark-toggle" (click)="toggleDark()" [attr.aria-pressed]="dark()">
+      {{ dark() ? '☀︎' : '☾' }} {{ dark() ? 'Light' : 'Dark' }}
+    </button>
+  </header>
+  <main class="shell-main" [attr.data-dark]="dark()">
+    <router-outlet />
+  </main>
+</div>

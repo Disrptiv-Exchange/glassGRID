@@ -1,0 +1,229 @@
+// glassRUN-styled demo shell.
+// Primary: #329B2A · Secondary: #5A5A5A · Font: Montserrat
+// Light by default; .shell-dark for dark variant.
+
+:host {
+  display: block;
+  min-height: 100vh;
+  background: var(--page-bg, #f5f6f7);
+  color: var(--page-fg, #1c1c1c);
+  font: 400 14px/1.5 "Montserrat", -apple-system, "Segoe UI", Roboto, sans-serif;
+  --glassrun-green: #329B2A;
+  --glassrun-green-dark: #2a8723;
+  --glassrun-grey: #5A5A5A;
+}
+
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.shell-dark {
+  --page-bg: #131416;
+  --page-fg: #f0f0f0;
+}
+
+.shell-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(28, 28, 28, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 rgba(28, 28, 28, 0.02);
+}
+.shell-dark .shell-header {
+  background: rgba(22, 23, 25, 0.82);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.brand {
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--page-fg);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.brand strong { font-weight: 800; color: var(--glassrun-green); }
+
+.nav { display: flex; gap: 2px; flex: 1 1 auto; flex-wrap: wrap; }
+.nav a {
+  padding: 7px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--glassrun-grey);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.nav a:hover {
+  background: rgba(50, 155, 42, 0.07);
+  color: var(--glassrun-green);
+}
+.nav a.active {
+  background: rgba(50, 155, 42, 0.12);
+  color: var(--glassrun-green);
+  font-weight: 600;
+}
+.shell-dark .nav a { color: #b6b6b6; }
+.shell-dark .nav a:hover { background: rgba(50, 155, 42, 0.16); color: var(--glassrun-green); }
+.shell-dark .nav a.active { background: rgba(50, 155, 42, 0.22); }
+
+.dark-toggle {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(28, 28, 28, 0.10);
+  color: var(--glassrun-grey);
+  cursor: pointer;
+  font: 500 12px "Montserrat", sans-serif;
+  transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              border-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.dark-toggle:hover {
+  background: rgba(50, 155, 42, 0.08);
+  border-color: rgba(50, 155, 42, 0.30);
+  color: var(--glassrun-green);
+}
+.shell-dark .dark-toggle { color: #cfcfcf; border-color: rgba(255, 255, 255, 0.10); }
+
+.shell-main {
+  padding: 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+::ng-deep .feature {
+  display: grid;
+  gap: 16px;
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(28, 28, 28, 0.03), 0 8px 24px rgba(28, 28, 28, 0.05);
+  border: 1px solid rgba(28, 28, 28, 0.04);
+}
+.shell-dark ::ng-deep .feature {
+  background: #1a1b1d;
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+::ng-deep .feature h1 {
+  font-size: 22px;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--page-fg);
+}
+::ng-deep .feature p {
+  margin: 0;
+  color: var(--glassrun-grey);
+  max-width: 72ch;
+  font-weight: 400;
+  line-height: 1.55;
+}
+::ng-deep .feature p code {
+  background: rgba(50, 155, 42, 0.08);
+  color: var(--glassrun-green);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+::ng-deep .feature .controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  background: #fafafa;
+  border-radius: 14px;
+  border: 1px solid rgba(28, 28, 28, 0.04);
+}
+.shell-dark ::ng-deep .feature .controls {
+  background: #202224;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+::ng-deep .feature glass-grid { height: 540px; }
+::ng-deep .feature .controls label {
+  font-size: 13px;
+  color: var(--glassrun-grey);
+  font-weight: 500;
+}
+::ng-deep .feature .controls button,
+::ng-deep .feature .controls select,
+::ng-deep .feature .controls input[type="text"],
+::ng-deep .feature .controls input[type="number"] {
+  padding: 7px 14px;
+  border: 1px solid rgba(28, 28, 28, 0.08);
+  background: #ffffff;
+  border-radius: 10px;
+  color: var(--page-fg);
+  font: 500 13px "Montserrat", sans-serif;
+  transition: background-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              border-color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              color 180ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 180ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+::ng-deep .feature .controls button { cursor: pointer; color: var(--glassrun-grey); }
+::ng-deep .feature .controls button:hover {
+  background: rgba(50, 155, 42, 0.06);
+  border-color: rgba(50, 155, 42, 0.25);
+  color: var(--glassrun-green);
+}
+::ng-deep .feature .controls button.primary,
+::ng-deep .feature .controls button[data-primary] {
+  background: var(--glassrun-green);
+  color: #ffffff;
+  border-color: var(--glassrun-green);
+  box-shadow: 0 2px 6px rgba(50, 155, 42, 0.25);
+}
+::ng-deep .feature .controls button.primary:hover,
+::ng-deep .feature .controls button[data-primary]:hover {
+  background: var(--glassrun-green-dark);
+  border-color: var(--glassrun-green-dark);
+  box-shadow: 0 4px 12px rgba(50, 155, 42, 0.35);
+}
+
+.shell-dark ::ng-deep .feature .controls button,
+.shell-dark ::ng-deep .feature .controls select,
+.shell-dark ::ng-deep .feature .controls input[type="text"],
+.shell-dark ::ng-deep .feature .controls input[type="number"] {
+  background: #1a1b1d;
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #cfcfcf;
+}
+.shell-dark ::ng-deep .feature .controls button:hover {
+  background: rgba(50, 155, 42, 0.16);
+  color: var(--glassrun-green);
+}
+
+/* Card index on home */
+::ng-deep .feature .card-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important; gap: 16px !important; }
+::ng-deep .feature .card {
+  padding: 18px !important;
+  border-radius: 16px !important;
+  border-color: rgba(28, 28, 28, 0.06) !important;
+  background: #ffffff;
+  transition: transform 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              box-shadow 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+              border-color 200ms cubic-bezier(0.25, 0.1, 0.25, 1) !important;
+}
+::ng-deep .feature .card:hover {
+  border-color: var(--glassrun-green) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(50, 155, 42, 0.12) !important;
+}
+::ng-deep .feature .card h3 { color: var(--page-fg); margin: 0 0 6px; }
+::ng-deep .feature .card p { color: var(--glassrun-grey); }
+.shell-dark ::ng-deep .feature .card { background: #1f2123; border-color: rgba(255, 255, 255, 0.06) !important; }

@@ -1,0 +1,58 @@
+# Compiled output
+**/dist
+**/tmp
+**/out-tsc
+**/bazel-out
+
+# Node
+**/node_modules
+npm-debug.log
+yarn-error.log
+yarn-debug.log*
+.pnpm-debug.log*
+
+# Angular
+**/.angular/cache
+
+# IDEs
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# VS Code (keep shared workspace files but ignore user-local state)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/mcp.json
+.history/*
+
+# Test / coverage
+/coverage
+/playwright-report
+__screenshots__/
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+._*
+
+# Logs
+*.log
+*.tsbuildinfo
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Claude / agent scratch — agent definitions, CLAUDE.md, and scripts ARE checked in
+.claude/memory/
+
