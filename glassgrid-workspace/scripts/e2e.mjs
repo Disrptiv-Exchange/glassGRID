@@ -236,22 +236,22 @@ async function runChecks(route, page) {
         return g?.classList.contains('gg-dark');
       });
       if (!isDark) throw new Error('dark mode class not applied');
-      // try material
-      await page.getByTestId('theme-select').selectOption('material');
+      // dense variant
+      await page.getByTestId('theme-select').selectOption('dense');
       await page.waitForTimeout(150);
-      const isMaterial = await page.evaluate(() => {
+      const isDense = await page.evaluate(() => {
         const g = document.querySelector('glass-grid[data-testid="themes-grid"]');
-        return g?.classList.contains('gg-theme-material');
+        return g?.classList.contains('variant-dense');
       });
-      if (!isMaterial) throw new Error('material theme not applied');
-      // try balham
-      await page.getByTestId('theme-select').selectOption('balham');
+      if (!isDense) throw new Error('dense variant class not applied');
+      // brand variant (CSS-var override)
+      await page.getByTestId('theme-select').selectOption('brand');
       await page.waitForTimeout(150);
-      const isBalham = await page.evaluate(() => {
+      const isBrand = await page.evaluate(() => {
         const g = document.querySelector('glass-grid[data-testid="themes-grid"]');
-        return g?.classList.contains('gg-theme-balham');
+        return g?.classList.contains('variant-brand');
       });
-      if (!isBalham) throw new Error('balham theme not applied');
+      if (!isBrand) throw new Error('brand variant class not applied');
       // RTL
       await page.getByTestId('rtl-toggle').check();
       await page.waitForTimeout(100);

@@ -1,38 +1,41 @@
 // glassGRID — base styles.
 // Visual values come from CSS custom properties (see :host defaults below).
+// The library ships with a single built-in theme — glassRUN (primary green
+// #329B2A on near-white / dark surfaces, Montserrat, 16–20px radii). Override
+// any --gg-* variable from your own styles to retheme.
 
 :host {
-  // colors
+  // ---- palette (glassRUN) ----
   --gg-bg: #ffffff;
-  --gg-fg: #1a1d24;
-  --gg-muted-fg: #5a6270;
-  --gg-border: rgba(0, 0, 0, 0.08);
-  --gg-header-bg: #f6f8fb;
-  --gg-header-fg: #1a1d24;
-  --gg-row-hover-bg: rgba(0, 0, 0, 0.03);
-  --gg-row-odd-bg: rgba(0, 0, 0, 0.015);
-  --gg-row-selected-bg: rgba(56, 132, 255, 0.12);
+  --gg-fg: #1c1c1c;
+  --gg-muted-fg: #5a5a5a;
+  --gg-border: rgba(28, 28, 28, 0.07);
+  --gg-header-bg: #fafafa;
+  --gg-header-fg: #5a5a5a;
+  --gg-row-hover-bg: rgba(50, 155, 42, 0.05);
+  --gg-row-odd-bg: rgba(0, 0, 0, 0.012);
+  --gg-row-selected-bg: rgba(50, 155, 42, 0.10);
   --gg-row-selected-fg: var(--gg-fg);
-  --gg-focus-ring: rgba(56, 132, 255, 0.35);
-  --gg-accent: #3884ff;
-  --gg-overlay-bg: rgba(255, 255, 255, 0.7);
-  --gg-flash-color: rgba(255, 209, 0, 0.45);
-  --gg-find-color: rgba(255, 209, 0, 0.55);
-  --gg-range-bg: rgba(56, 132, 255, 0.10);
-  --gg-range-border: rgba(56, 132, 255, 0.55);
-  --gg-detail-bg: rgba(0, 0, 0, 0.03);
+  --gg-accent: #329B2A;
+  --gg-focus-ring: rgba(50, 155, 42, 0.25);
+  --gg-overlay-bg: rgba(255, 255, 255, 0.78);
+  --gg-flash-color: rgba(50, 155, 42, 0.30);
+  --gg-find-color: rgba(255, 220, 100, 0.55);
+  --gg-range-bg: rgba(50, 155, 42, 0.10);
+  --gg-range-border: rgba(50, 155, 42, 0.55);
+  --gg-detail-bg: #fafafa;
 
-  // sizing
-  --gg-row-height: 36px;
-  --gg-header-height: 40px;
-  --gg-cell-padding-x: 12px;
+  // ---- sizing & shape (SaaS-style) ----
+  --gg-row-height: 44px;
+  --gg-header-height: 48px;
+  --gg-cell-padding-x: 18px;
   --gg-cell-padding-y: 0;
-  --gg-border-radius: 8px;
-  --gg-font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --gg-border-radius: 16px;
+  --gg-font: 13px/1.5 "Montserrat", -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  // motion
-  --gg-anim-duration: 180ms;
-  --gg-anim-easing: cubic-bezier(0.2, 0.7, 0.2, 1);
+  // ---- motion ----
+  --gg-anim-duration: 200ms;
+  --gg-anim-easing: cubic-bezier(0.25, 0.1, 0.25, 1);
 
   display: grid;
   grid-template-rows: auto 1fr;
@@ -45,20 +48,128 @@
   user-select: none;
   position: relative;
   contain: layout paint;
+  box-shadow: 0 1px 2px rgba(28, 28, 28, 0.04), 0 8px 24px rgba(28, 28, 28, 0.06);
 }
 
+// ---- glassRUN typography polish (headers uppercase, body weight 500) ----
+:host .gg-header-cell {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gg-muted-fg);
+}
+:host .gg-header-label { font-weight: 600; }
+
+// ---- glassRUN button + input polish ----
+:host .gg-page-btn,
+:host .gg-sidebar-toggle,
+:host .gg-filter-actions button:not(.primary),
+:host .gg-filter-btn {
+  border-radius: 10px;
+  border-color: var(--gg-border);
+  background: #ffffff;
+  color: var(--gg-muted-fg);
+  transition: background-color var(--gg-anim-duration) var(--gg-anim-easing),
+              border-color var(--gg-anim-duration) var(--gg-anim-easing),
+              color var(--gg-anim-duration) var(--gg-anim-easing),
+              box-shadow var(--gg-anim-duration) var(--gg-anim-easing);
+}
+:host .gg-page-btn:hover:not(:disabled),
+:host .gg-sidebar-toggle:hover,
+:host .gg-filter-actions button:not(.primary):hover,
+:host .gg-filter-btn:hover {
+  background: rgba(50, 155, 42, 0.06);
+  color: var(--gg-accent);
+  border-color: rgba(50, 155, 42, 0.25);
+}
+:host .gg-filter-actions button.primary {
+  background: var(--gg-accent);
+  color: #ffffff;
+  border-color: var(--gg-accent);
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(50, 155, 42, 0.25);
+}
+:host .gg-filter-actions button.primary:hover {
+  background: #2a8723;
+  border-color: #2a8723;
+  box-shadow: 0 4px 12px rgba(50, 155, 42, 0.35);
+}
+
+:host .gg-quick-filter,
+:host .gg-find-input,
+:host .gg-floating-filter-input,
+:host .gg-filter-popup input,
+:host .gg-filter-popup select {
+  border-radius: 10px;
+  border-color: var(--gg-border);
+  background: #ffffff;
+}
+:host .gg-quick-filter:focus,
+:host .gg-find-input:focus,
+:host .gg-floating-filter-input:focus,
+:host .gg-filter-popup input:focus,
+:host .gg-filter-popup select:focus {
+  border-color: var(--gg-accent);
+  box-shadow: 0 0 0 4px var(--gg-focus-ring);
+  outline: none;
+}
+
+:host .gg-toolbar,
+:host .gg-pagination,
+:host .gg-status-bar {
+  background: var(--gg-header-bg);
+  border-color: var(--gg-border);
+}
+
+:host .gg-sidebar { border-radius: 0 var(--gg-border-radius) var(--gg-border-radius) 0; }
+:host .gg-sidebar-tab.gg-active { color: var(--gg-accent); border-bottom-color: var(--gg-accent); }
+
+:host .gg-filter-popup,
+:host .gg-context-menu {
+  border-radius: 14px;
+  border-color: var(--gg-border);
+  box-shadow: 0 4px 14px rgba(28, 28, 28, 0.06), 0 16px 48px rgba(28, 28, 28, 0.10);
+}
+
+:host .gg-checkbox { accent-color: var(--gg-accent); }
+
+// ---- dark variant (glassRUN dark) ----
 :host(.gg-dark) {
-  --gg-bg: #0e1117;
-  --gg-fg: #e6e8eb;
-  --gg-muted-fg: #9aa3b2;
+  --gg-bg: #161719;
+  --gg-fg: #f0f0f0;
+  --gg-muted-fg: #9b9b9b;
   --gg-border: rgba(255, 255, 255, 0.08);
-  --gg-header-bg: #181c24;
-  --gg-header-fg: #e6e8eb;
-  --gg-row-hover-bg: rgba(255, 255, 255, 0.04);
+  --gg-header-bg: #1d1f22;
+  --gg-header-fg: #9b9b9b;
+  --gg-row-hover-bg: rgba(50, 155, 42, 0.10);
   --gg-row-odd-bg: rgba(255, 255, 255, 0.02);
-  --gg-row-selected-bg: rgba(56, 132, 255, 0.22);
-  --gg-overlay-bg: rgba(14, 17, 23, 0.7);
-  --gg-detail-bg: rgba(255, 255, 255, 0.04);
+  --gg-row-selected-bg: rgba(50, 155, 42, 0.20);
+  --gg-overlay-bg: rgba(22, 23, 25, 0.78);
+  --gg-detail-bg: #1d1f22;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+:host(.gg-dark) .gg-page-btn,
+:host(.gg-dark) .gg-sidebar-toggle,
+:host(.gg-dark) .gg-filter-actions button:not(.primary),
+:host(.gg-dark) .gg-filter-btn {
+  background: #1d1f22;
+  color: #cfcfcf;
+}
+:host(.gg-dark) .gg-page-btn:hover:not(:disabled),
+:host(.gg-dark) .gg-sidebar-toggle:hover,
+:host(.gg-dark) .gg-filter-actions button:not(.primary):hover,
+:host(.gg-dark) .gg-filter-btn:hover {
+  background: rgba(50, 155, 42, 0.18);
+  color: var(--gg-accent);
+}
+:host(.gg-dark) .gg-quick-filter,
+:host(.gg-dark) .gg-find-input,
+:host(.gg-dark) .gg-floating-filter-input,
+:host(.gg-dark) .gg-filter-popup input,
+:host(.gg-dark) .gg-filter-popup select {
+  background: #1d1f22;
+  color: var(--gg-fg);
 }
 
 :host(.gg-rtl) { direction: rtl; }

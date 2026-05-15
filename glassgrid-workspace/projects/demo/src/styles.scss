@@ -1,10 +1,7 @@
-/* Global styles for the demo. */
-@use "../../glassgrid/src/themes/quartz.scss";
-@use "../../glassgrid/src/themes/material.scss";
-@use "../../glassgrid/src/themes/balham.scss";
-@use "../../glassgrid/src/themes/glassrun.scss";
+/* Global styles for the demo.
+ * The library now ships with a single built-in theme (glassRUN), baked into
+ * <glass-grid>'s :host styles — no @use / @import needed. */
 
-/* Montserrat — all weights, used by the glassRUN theme + demo shell */
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500;600;700;800;900&display=swap');
 
 html, body { margin: 0; padding: 0; }

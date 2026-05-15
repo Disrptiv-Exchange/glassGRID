@@ -97,14 +97,7 @@ export class PeoplePage {
 }
 ```
 
-Add the theme stylesheet to your global styles:
-
-```scss
-// styles.scss
-@import "@disrptiv-exchange/glassgrid/themes/quartz.scss";
-```
-
-That's the entire setup. No `NgModule`, no `providers`, no `forRoot()`.
+That's the entire setup. The library ships with the **glassRUN** theme baked into the component — no `@import` needed, no `NgModule`, no `providers`, no `forRoot()`. Override any `--gg-*` CSS custom property in your own styles to retheme.
 
 **→ Full step-by-step guide: [docs/getting-started.md](docs/getting-started.md)**
 
@@ -125,7 +118,7 @@ That's the entire setup. No `NgModule`, no `providers`, no `forRoot()`.
 | **Pagination**    | Page size selector, auto page size, full pagination API.                                                                              |
 | **Virtualisation**| Row virtualisation by default — verified at 100,000 rows / 60fps. Column virtualisation available.                                    |
 | **Export**        | CSV + Excel XML export. Save / restore full grid state as JSON.                                                                        |
-| **Theming**       | Quartz / Material / Balham themes (light + dark). All visual values are `--gg-*` CSS variables. Reduced-motion respected.            |
+| **Theming**       | One built-in theme (glassRUN, light + dark) baked into the component — no `@import` needed. All visual values are `--gg-*` CSS variables; override in your own styles to retheme. Reduced-motion respected. |
 | **a11y**          | `role="grid"`, full ARIA attributes, complete keyboard nav (arrows, Tab, PageUp/Down, Home/End, Space, Enter, F2).                    |
 | **Charts**        | Lightweight pure-SVG sparklines (`lineSparkline`, `barSparkline`, `areaSparkline`).                                                   |
 | **i18n / RTL**    | `[getLocaleText]` callback. `[enableRtl]` flips layout.                                                                                |
