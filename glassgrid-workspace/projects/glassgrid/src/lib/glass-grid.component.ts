@@ -905,6 +905,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     const d = this.draggingCol();
     this.draggingCol.set(null);
     if (!d || d.colId === target.colId) return;
+    // Sync pinning to the drop target's side: dragging a pinned column onto an
+    // unpinned target unpins it; dragging an unpinned column onto a pinned
+    // target pins it to that side.
+    const source = this.columnsWithState().find((c) => c.colId === d.colId);
+    if (source && !source.colDef.lockPinned && source.pinned !== target.pinned) {
+      this.api.setColumnPinned(d.colId, target.pinned);
+    }
     this.moveColumnInternal(d.colId, target.colId);
   }
   onHeaderDragEnd() { this.draggingCol.set(null); this.pinZoneHot.set(false); }
@@ -1371,18 +1378,19 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       { name: 'Clear sort',
         disabled: !cur,
         action: () => this.api.setSortModel(this.sortModel().filter((s) => s.colId !== colId)) },
-      { separator: true, name: '' },
-      { name: isLeft ? '✓ Pin left' : 'Pin left',
-        disabled: lockPin || isLeft,
-        action: () => this.api.setColumnPinned(colId, 'left') },
-      { name: 'Unpin',
-        disabled: lockPin || !isLeft,
-        action: () => this.api.setColumnPinned(colId, null) },
-      { separator: true, name: '' },
-      { name: 'Hide column',
-        disabled: lockVis,
-        action: () => this.api.setColumnVisible(colId, false) },
     ];
+    if (!lockPin) {
+      items.push({ separator: true, name: '' });
+      if (isLeft) {
+        items.push({ name: 'Unpin', action: () => this.api.setColumnPinned(colId, null) });
+      } else {
+        items.push({ name: 'Pin left', action: () => this.api.setColumnPinned(colId, 'left') });
+      }
+    }
+    items.push({ separator: true, name: '' });
+    items.push({ name: 'Hide column',
+      disabled: lockVis,
+      action: () => this.api.setColumnVisible(colId, false) });
     if (hidden.length) {
       items.push({ separator: true, name: '' });
       items.push({
