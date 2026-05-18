@@ -46,7 +46,7 @@ if (!existsSync(REPORT_DIR)) await mkdir(REPORT_DIR, { recursive: true });
 const results = [];
 
 const browser = await chromium.launch({
-  executablePath: CHROME_FOR_TESTING,
+  ...(existsSync(CHROME_FOR_TESTING) ? { executablePath: CHROME_FOR_TESTING } : {}),
   headless: true,
 });
 

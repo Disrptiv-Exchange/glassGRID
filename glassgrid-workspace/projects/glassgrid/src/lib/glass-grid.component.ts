@@ -8,6 +8,7 @@ import {
   effect,
   inject,
   input,
+  type OnDestroy,
   output,
   signal,
   untracked,
@@ -136,7 +137,7 @@ function escapeHtml(s: string): string {
     '[attr.data-sticky-groups]': 'stickyGroupRows() ? "true" : null',
   },
 })
-export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
+export class GlassGridComponent<TRow extends object = Record<string, unknown>> implements OnDestroy {
   // ===== inputs =====
   readonly columnDefs = input<(ColumnDef<TRow> | ColumnGroupDef<TRow>)[]>([]);
   readonly rowData = input<TRow[]>([]);
@@ -892,22 +893,27 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     });
 
     // Auto-fit columns whose width was not specified by the consumer.
-    // Runs once per column when data first becomes available. Columns with an
-    // explicit `width`, a `flex`, or a user-resized state are skipped.
+    // Runs once per column. Columns with an explicit `width`, a `flex`, or a
+    // user-resized state are skipped — explicit widths are honoured exactly
+    // (header truncates with ellipsis if the label can't fit).
     // Phase 1 — synchronous char-length heuristic so first paint is close.
     // Phase 2 — after render, measure each cell's scrollWidth and widen if the
     // rendered output (e.g. from a `cellRenderer` that adds chrome) is wider
     // than the heuristic guessed. See scheduleMeasureAutoFit().
+    // Both phases run regardless of whether rowData is populated yet — headers
+    // alone are enough to size non-explicit columns.
     effect(() => {
-      const nodes = this.sortedFilteredNodes();
-      if (!nodes.length) return;
+      // Re-fire when row data changes (so cell content factors into the heuristic)
+      // and when column defs change (so newly-added columns get measured too).
+      this.sortedFilteredNodes();
+      const cols = this.columnsWithState();
       untracked(() => {
-        const cols = this.columnsWithState();
         const state = new Map(this.internalColumnState());
         let changed = false;
         for (const c of cols) {
           if (c.widthExplicit) continue;
           if (c.flex) continue;
+          if (this.autoFitMeasured.has(c.colId)) continue;
           if (state.get(c.colId)?.width != null) continue;
           const w = this.computeAutoWidth(c);
           state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: w });
@@ -951,19 +957,14 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     const host = this.el?.nativeElement as HTMLElement | undefined;
     if (!host) return;
     const cols = this.columnsWithState();
-    // Auto-fit candidates: cell-driven widening only runs for columns the user
-    // didn't size explicitly and that aren't flex-managed.
+    // Auto-fit candidates only — explicit widths are honoured exactly.
+    // A column with an explicit `width` keeps that width regardless of how
+    // long its header label or cell content is (header will ellipsis-truncate
+    // if it doesn't fit). Flex columns are managed by the layout engine.
     const autoFitCandidates = cols.filter((c) =>
       !c.widthExplicit && !c.flex && !this.autoFitMeasured.has(c.colId),
     );
-    // Header-fit candidates: every non-flex column gets a header-width floor so
-    // a label can never be truncated, even when the consumer set an explicit
-    // `width: 120` and the header text needs 122px. We run this once per column
-    // (same as auto-fit) so subsequent user resizes aren't fought.
-    const headerFitCandidates = cols.filter(
-      (c) => !c.flex && !this.autoFitMeasured.has(c.colId),
-    );
-    if (!autoFitCandidates.length && !headerFitCandidates.length) return;
+    if (!autoFitCandidates.length) return;
     const renderedCols = this.renderedColumns();
     const colByAriaIndex = new Map<number, string>();
     renderedCols.forEach((c, i) => colByAriaIndex.set(i + 1, c.colId));
@@ -1036,10 +1037,9 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     } finally {
       probe.remove();
     }
-    // Apply widths. Two passes:
-    //   1. Auto-fit candidates take max(headerWidth, cellWidth) — full content fit.
-    //   2. Every non-flex column (including explicit-width ones) takes at least
-    //      headerWidth so the header label never truncates.
+    // Auto-fit candidates take max(headerWidth, cellWidth) — full content fit.
+    // Explicit-width columns are intentionally skipped: the user asked for that
+    // exact width and we honour it (header ellipsis-truncates if it can't fit).
     const state = new Map(this.internalColumnState());
     let changed = false;
     const widen = (c: typeof cols[number], measured: number) => {
@@ -1058,19 +1058,28 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       if (measured > 0) widen(c, measured);
       this.autoFitMeasured.add(c.colId);
     }
-    for (const c of headerFitCandidates) {
-      if (autoFitCandidates.includes(c)) continue; // already handled above
-      const h = headerWidth.get(c.colId);
-      if (h != null) widen(c, h);
-      this.autoFitMeasured.add(c.colId);
-    }
     if (changed) this.internalColumnState.set(state);
   }
 
   @ViewChild('viewport') viewportRef?: ElementRef<HTMLDivElement>;
+  private viewportResizeObserver: ResizeObserver | null = null;
 
   @HostListener('window:resize') onWindowResize() { this.measureViewport(); }
-  ngAfterViewInit() { this.measureViewport(); }
+  ngAfterViewInit() {
+    this.measureViewport();
+    // Track host/parent resize too — window:resize alone misses layout changes
+    // like sidebar toggle or flex-container reflow, which leave fitGridWidth
+    // out of date and produce empty whitespace on the right.
+    const vp = this.viewportRef?.nativeElement;
+    if (vp && typeof ResizeObserver !== 'undefined') {
+      this.viewportResizeObserver = new ResizeObserver(() => this.measureViewport());
+      this.viewportResizeObserver.observe(vp);
+    }
+  }
+  ngOnDestroy() {
+    this.viewportResizeObserver?.disconnect();
+    this.viewportResizeObserver = null;
+  }
   private measureViewport() {
     const vp = this.viewportRef?.nativeElement;
     if (vp) {
