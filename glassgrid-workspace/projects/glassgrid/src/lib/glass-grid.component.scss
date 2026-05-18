@@ -454,6 +454,13 @@
 .gg-cell .gg-cell-text {
   flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Consumer cellRenderer output. Must not wrap, so the auto-fit DOM measurement
+ * (scrollWidth) reads the true unwrapped content width instead of the
+ * already-wrapped width. Renderers that opt into wrapping can override locally
+ * (their inner element's white-space wins via specificity). */
+.gg-cell .gg-cell-renderer {
+  flex: 1 1 auto; overflow: hidden; white-space: nowrap; min-width: 0;
+}
 .gg-cell-focused { outline: 2px solid var(--gg-accent); outline-offset: -2px; z-index: 1; }
 .gg-cell-range {
   background: var(--gg-range-bg);
@@ -773,3 +780,67 @@
   .gg-body-canvas { height: auto !important; }
   .gg-row { position: relative !important; transform: none !important; }
 }
+
+// ---- pinned top / bottom rows ----
+// They scroll inside the body, but always sit at the visual top / bottom of the data band
+// and are immune to pagination + filtering.
+.gg-row-pinned-top, .gg-row-pinned-bottom {
+  background: color-mix(in srgb, var(--gg-accent) 5%, var(--gg-bg));
+  font-weight: 500;
+  border-bottom: 2px solid color-mix(in srgb, var(--gg-accent) 35%, var(--gg-border));
+}
+.gg-row-pinned-bottom {
+  border-bottom: none;
+  border-top: 2px solid color-mix(in srgb, var(--gg-accent) 35%, var(--gg-border));
+}
+
+// ---- wrap header text + auto header height ----
+:host([data-wrap-header="true"]) .gg-header-cell .gg-header-label {
+  white-space: normal;
+  line-height: 1.2;
+  word-break: break-word;
+}
+:host([data-auto-header-height="true"]) .gg-header {
+  height: auto !important;
+  min-height: var(--gg-header-height);
+}
+:host([data-auto-header-height="true"]) .gg-header-cell {
+  height: auto;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  align-items: flex-start;
+}
+
+// ---- wrap text + auto row height ----
+.gg-cell.gg-wrap-text .gg-cell-text {
+  white-space: normal;
+  line-height: 1.35;
+  word-break: break-word;
+  display: block;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.gg-cell.gg-auto-height {
+  align-items: flex-start;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+// When a row has auto-height cells, its computed height is driven by JS measurement;
+// the row keeps absolute positioning but rowOffsets allows for variable heights.
+.gg-row[data-auto-height="true"] {
+  align-items: stretch;
+}
+
+// ---- sticky group rows ----
+// When stickyGroupRows is enabled, the currently visible group's header row "sticks"
+// to the top of the viewport (just under the column headers) while its children scroll.
+:host([data-sticky-groups="true"]) .gg-row.gg-row-group {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: color-mix(in srgb, var(--gg-accent) 6%, var(--gg-bg));
+  box-shadow: 0 1px 0 var(--gg-border);
+}
+// In a virtualised body the row is absolutely positioned, so the sticky effect needs
+// the gg-body itself to provide the scrolling context (it already does).
+:host([data-sticky-groups="true"]) .gg-body-canvas { position: relative; }
