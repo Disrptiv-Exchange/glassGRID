@@ -25,13 +25,14 @@ const data: Line[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="feature">
-      <h1>autoSizeStrategy = 'fitCellContents'</h1>
+      <h1>autoSizeStrategy = 'fitCellContents' (deprecated alias)</h1>
       <p>
-        Header labels here are long ("Branch Plant Code", "Ordered Qty") but the cell data is
-        short ("PKG01", "500"). With <code>autoSizeStrategy="fitCellContents"</code>, columns
-        size to the cell content only — the header ellipsis-truncates if it can't fit. Compare
-        to the default <code>'fitGridWidth'</code> on other routes where columns inflate to the
-        longer of header vs cell.
+        <strong>v0.4.16+:</strong> <code>'fitCellContents'</code> is a deprecated alias for the
+        default <code>'fitGridWidth'</code>. Columns size to <code>max(header, cell)</code> so
+        neither header nor cell content truncates; if the total is less than the viewport,
+        every column is scaled up to fill the body. Here that means each column inflates to
+        fit its header ("Branch Plant Code", "Ordered Qty") even though the data underneath is
+        short.
       </p>
       <glass-grid
         class="gg-theme-glassrun"

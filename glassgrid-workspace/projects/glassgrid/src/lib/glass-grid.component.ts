@@ -171,11 +171,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   /**
    * 'fitGridWidth' (default): size columns to max(header content, cell content),
    *   then scale up uniformly if total < viewport so columns fill the body.
-   * 'fitCellContents': size columns to cell content only; the header label is
-   *   ignored and will ellipsis-truncate if it can't fit. Use this when narrow
-   *   data should produce narrow columns (e.g. numeric / status / code columns
-   *   under long header labels like 'Ordered Quantity').
-   * null: skip auto-fit entirely; columns use declared width / minWidth.
+   *   Neither the header label nor the cell content will truncate on a column
+   *   without an explicit `width:`.
+   * 'fitCellContents': DEPRECATED. Behaves identically to 'fitGridWidth' as of
+   *   v0.4.16. (Earlier versions sized to cell content only and let the header
+   *   ellipsis-truncate; that behavior was reverted because it left long
+   *   headers permanently truncated under any column with short data.)
+   * null: skip the fill-viewport upscaling. Per-column auto-fit to
+   *   max(header, cell) still runs; columns just don't grow further to soak
+   *   up leftover horizontal space. Use this when you want columns at their
+   *   natural content width and accept whitespace on the right.
    */
   readonly autoSizeStrategy = input<'fitGridWidth' | 'fitCellContents' | null>('fitGridWidth');
 
@@ -715,9 +720,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const firstRightId = right.length ? right[0]!.colId : null;
     const all = [...left, ...center, ...right];
 
-    // ---- autoSizeStrategy: 'fitGridWidth' — scale widths so total fills the viewport ----
+    // ---- fitGridWidth — scale widths so total fills the viewport ----
+    // 'fitCellContents' is a deprecated alias for 'fitGridWidth' and gets the
+    // same scaling. Only `null` opts out of the fill-viewport pass.
     let factor = 1;
-    if (this.autoSizeStrategy() === 'fitGridWidth' && all.length) {
+    const strategy = this.autoSizeStrategy();
+    if ((strategy === 'fitGridWidth' || strategy === 'fitCellContents') && all.length) {
       const naturalSum = all.reduce((s, c) => s + c.width, 0);
       const vw = this.viewportWidth();
       if (naturalSum > 0 && vw > naturalSum) {
@@ -1054,13 +1062,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         changed = true;
       }
     };
-    const strategy = this.autoSizeStrategy();
+    // Always size to max(headerWidth, cellWidth) so neither header label nor
+    // cell content truncates. Consumers who want a hard width set `width:` on
+    // the ColumnDef (which short-circuits this whole pass via widthExplicit).
     for (const c of autoFitCandidates) {
       const h = headerWidth.get(c.colId) ?? 0;
       const b = cellWidth.get(c.colId) ?? 0;
-      // 'fitCellContents': cell width only — header label is allowed to ellipsis-truncate.
-      // 'fitGridWidth' (default) / null: legacy max(header, cell) tiebreak.
-      const measured = strategy === 'fitCellContents' ? b : Math.max(h, b);
+      const measured = Math.max(h, b);
       if (measured > 0) widen(c, measured);
       this.autoFitMeasured.add(c.colId);
     }
@@ -2630,12 +2638,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   private computeAutoWidth(col: ResolvedColumn<TRow>): number {
     const padding = 32;
-    const strategy = this.autoSizeStrategy();
-    // When 'fitCellContents', ignore the header label entirely and seed from
-    // padding only. Cell content widths are added below.
-    let max = strategy === 'fitCellContents'
-      ? padding
-      : (col.headerName?.length ?? 0) * 8 + padding;
+    // Always seed from the header label width so a column never starts narrower
+    // than its header. Cell content widths are folded in below; the final width
+    // is the max of header and the widest sampled cell.
+    let max = (col.headerName?.length ?? 0) * 8 + padding;
     // Sample the first 200 visible rows — proportional-font heuristic, ~7px/char.
     for (const n of this.sortedFilteredNodes().slice(0, 200)) {
       const s = this.cellText(col, n);

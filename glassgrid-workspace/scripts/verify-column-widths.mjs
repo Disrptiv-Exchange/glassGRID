@@ -93,7 +93,9 @@ assert(
   `viewport=${fill.vpWidth}px, columns=${fill.total}px, gap=${gap}px`,
 );
 
-// --- Scenarios 5-7: autoSizeStrategy='fitCellContents' on /fit-cell-contents ---
+// --- Scenarios 5-7: 'fitCellContents' deprecated alias on /fit-cell-contents ---
+// As of v0.4.16, 'fitCellContents' behaves identically to 'fitGridWidth':
+// columns size to max(header, cell). The old cell-only behavior is reverted.
 await page.goto(`${BASE}/fit-cell-contents`, { waitUntil: 'networkidle', timeout: 20_000 });
 await page.waitForSelector('glass-grid .gg-header-cell', { timeout: 10_000 });
 await page.waitForTimeout(500);
@@ -101,29 +103,38 @@ await page.waitForTimeout(500);
 const fcHeaders = await probeHeaders();
 const byText = Object.fromEntries(fcHeaders.map((h) => [h.text, h]));
 
-// S5: a column with short cell data ("500"/"5,000" etc.) under a long header
-// ("Ordered Qty") must be narrow — i.e. the header DOES truncate.
+// S5: long header over short cells — header MUST fit (no truncation) now that
+// the alias is in effect. Column widens to the header.
 const orderedQty = byText['Ordered Qty'];
 assert(
-  "S5: fitCellContents — 'Ordered Qty' column sizes to cell data, header truncates",
-  !!orderedQty && orderedQty.truncated,
+  "S5: 'fitCellContents' (alias) — 'Ordered Qty' header fits, column widens for header",
+  !!orderedQty && !orderedQty.truncated,
   orderedQty ? `width=${orderedQty.width}, truncated=${orderedQty.truncated}` : 'header not found',
 );
 
-// S6: another short-data column — "Branch Plant Code" has cells "PKG01" etc., header is long
+// S6: "Branch Plant Code" header over short "PKG01" cells — header must fit.
 const branch = byText['Branch Plant Code'];
 assert(
-  "S6: fitCellContents — 'Branch Plant Code' (short cells) sizes narrow, header truncates",
-  !!branch && branch.truncated,
+  "S6: 'fitCellContents' (alias) — 'Branch Plant Code' header fits, column widens",
+  !!branch && !branch.truncated,
   branch ? `width=${branch.width}, truncated=${branch.truncated}` : 'header not found',
 );
 
-// S7: minWidth (60px set in defaultColDef) is still respected — no column is smaller than that
-const tooNarrow = fcHeaders.find((h) => h.width < 60);
+// S7: total natural width is small for 6 columns, so the fill-viewport upscaling
+// should kick in — total columns ≈ viewport width, leaving no whitespace gap.
+const viewport = await page.evaluate(() => {
+  const vp = document.querySelector('glass-grid .gg-body');
+  const cells = Array.from(document.querySelectorAll('glass-grid .gg-header-cells > .gg-header-cell'));
+  return {
+    vpWidth: vp ? vp.clientWidth : 0,
+    total: Math.round(cells.reduce((a, c) => a + c.getBoundingClientRect().width, 0)),
+  };
+});
+const fcGap = viewport.vpWidth - viewport.total;
 assert(
-  'S7: fitCellContents — minWidth is still respected (no column < 60px)',
-  !tooNarrow,
-  tooNarrow ? `column "${tooNarrow.text}" is ${tooNarrow.width}px (< 60)` : `min width across all = ${Math.min(...fcHeaders.map((h) => h.width))}px`,
+  "S7: 'fitCellContents' (alias) — fill-viewport applies; no whitespace gap",
+  Math.abs(fcGap) <= 4,
+  `viewport=${viewport.vpWidth}px, columns=${viewport.total}px, gap=${fcGap}px`,
 );
 
 if (errors.length) {
