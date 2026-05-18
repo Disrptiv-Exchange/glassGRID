@@ -1,4 +1,4 @@
-import type { ColumnDef, DefaultColDef } from '../types';
+import type { ColumnDef, ColumnTypeMap, DefaultColDef } from '../types';
 
 export interface ResolvedColumn<TRow = unknown> {
   colDef: ColumnDef<TRow>;
@@ -6,6 +6,9 @@ export interface ResolvedColumn<TRow = unknown> {
   field: string | undefined;
   headerName: string;
   width: number;
+  /** True iff the consumer set `width` on the ColumnDef (or via defaultColDef).
+   *  When false, the grid auto-fits this column to its content on first data load. */
+  widthExplicit: boolean;
   minWidth: number;
   maxWidth: number | undefined;
   flex: number | undefined;
@@ -32,9 +35,19 @@ let counter = 0;
 export function resolveColumns<TRow>(
   defs: readonly ColumnDef<TRow>[],
   defaultColDef?: DefaultColDef<TRow>,
+  columnTypes?: ColumnTypeMap<TRow>,
 ): ResolvedColumn<TRow>[] {
   return defs.map((d) => {
-    const merged: ColumnDef<TRow> = { ...defaultColDef, ...d };
+    // Apply column types in order: defaultColDef → each type from `columnTypes` → per-column def.
+    let merged: ColumnDef<TRow> = { ...defaultColDef };
+    if (d.type && columnTypes) {
+      const typeKeys = (Array.isArray(d.type) ? d.type : d.type.split(/[\s,]+/)).filter(Boolean);
+      for (const key of typeKeys) {
+        const t = columnTypes[key];
+        if (t) merged = { ...merged, ...t };
+      }
+    }
+    merged = { ...merged, ...d };
     const colId = merged.colId ?? merged.field ?? `col_${++counter}`;
     return {
       colDef: merged,
@@ -42,6 +55,7 @@ export function resolveColumns<TRow>(
       field: merged.field,
       headerName: merged.headerName ?? prettify(merged.field ?? colId),
       width: merged.width ?? DEFAULTS.width,
+      widthExplicit: merged.width !== undefined,
       minWidth: merged.minWidth ?? DEFAULTS.minWidth,
       maxWidth: merged.maxWidth,
       flex: merged.flex,

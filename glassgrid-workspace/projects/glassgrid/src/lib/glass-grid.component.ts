@@ -131,6 +131,9 @@ function escapeHtml(s: string): string {
     '[attr.aria-colcount]': 'visibleColumns().length',
     '[attr.aria-multiselectable]': 'rowSelection() === "multiple"',
     '[attr.dir]': 'enableRtl() ? "rtl" : null',
+    '[attr.data-wrap-header]': 'wrapHeaderText() ? "true" : null',
+    '[attr.data-auto-header-height]': 'autoHeaderHeight() ? "true" : null',
+    '[attr.data-sticky-groups]': 'stickyGroupRows() ? "true" : null',
   },
 })
 export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
@@ -140,6 +143,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   readonly pinnedTopRowData = input<TRow[]>([]);
   readonly pinnedBottomRowData = input<TRow[]>([]);
   readonly defaultColDef = input<DefaultColDef<TRow>>({});
+  /**
+   * Map of reusable column-type templates referenced by `ColumnDef.type`.
+   * Multiple types per column compose left-to-right; per-column props override.
+   */
+  readonly columnTypes = input<import('./types').ColumnTypeMap<TRow>>({});
   readonly getRowId = input<((row: TRow) => string) | null>(null);
 
   // server / infinite row models
@@ -187,6 +195,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
 
   readonly rowHeight = input(36);
   readonly headerHeight = input(40);
+  /** When true, header text wraps across multiple lines instead of truncating. */
+  readonly wrapHeaderText = input(false);
+  /** When true, the header row grows to fit the tallest wrapped label. */
+  readonly autoHeaderHeight = input(false);
   readonly quickFilterText = input('');
   readonly darkMode = input(false);
   readonly animateRows = input(true);
@@ -207,6 +219,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   readonly groupDefaultExpanded = input(0);
   readonly autoGroupColumnDef = input<Partial<ColumnDef<TRow>>>({});
   readonly suppressAggFuncInHeader = input(false);
+  /**
+   * When true, the group row's value column also renders the group's children at the same level
+   * (no separate group-row "key" cell beyond the auto-group column).
+   */
+  readonly showOpenedGroup = input(false);
+  /** When true, group parent rows are hidden once expanded — children "replace" the parent visually. */
+  readonly groupHideOpenParents = input(false);
+  /** When true, the currently-open group row stays pinned at the top of the viewport while you scroll its children. */
+  readonly stickyGroupRows = input(false);
 
   // tree data
   readonly treeData = input(false);
@@ -269,6 +290,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   readonly rowGroupOpened = output<{ groupId: string; expanded: boolean }>();
   readonly rowDragEnd = output<RowDragEvent<TRow>>();
   readonly rangeSelectionChanged = output<RangeSelectionChangedEvent<TRow>>();
+  readonly asyncTransactionsFlushed = output<import('./types').AsyncTransactionsFlushedEvent<TRow>>();
 
   // ===== internal state =====
   private readonly el = inject(ElementRef<HTMLElement>);
@@ -391,6 +413,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   // ===== derived =====
   protected readonly t = computed(() => resolveLocale(this.getLocaleText()));
 
+  /** Async transaction queue. Flushed on next animation frame. */
+  private asyncTxQueue: { tx: import('./types').RowDataTransaction<TRow>; callback?: (res: { add: number; remove: number; update: number }) => void }[] = [];
+  private asyncTxScheduled = false;
+
   /** Local row data override — populated by applyTransaction(). null = use input rowData. */
   private readonly localRowData = signal<TRow[] | null>(null);
 
@@ -437,7 +463,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   readonly resolvedColumns = computed<ResolvedColumn<TRow>[]>(() => {
     const flat = this.headerTree().flatColumns;
     const def = this.defaultColDef();
-    return resolveColumns(flat, def);
+    return resolveColumns(flat, def, this.columnTypes());
   });
 
   /** Seed rowGroupColIds from column defs. */
@@ -550,7 +576,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         this.groupDefaultExpanded() > 0,
       );
       flat = f;
-    } else {
+
+      // groupHideOpenParents: drop expanded group rows whose children replace them
+      if (this.groupHideOpenParents()) {
+        flat = flat.filter((r) => !(r.kind === 'group' && r.group?.expanded));
+      }
+      // showOpenedGroup: keep the parent group row visible when its children are open (default already)
+      // (when not set, ag-grid hides the parent's key column; our auto-group column handles indent already)
+    }
+    else {
       flat = baseNodes.map((node) => ({ kind: 'leaf' as const, node, id: node.id, level: 0 }));
     }
 
@@ -567,7 +601,23 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       }
       flat = out;
     }
-    // pinned top + bottom rows wrap the displayed rows (not virtualised; rendered separately by template)
+
+    // Pinned top + bottom rows: prepended and appended as 'leaf' rows.
+    // They are NOT paginated and NOT filtered — they always appear at the boundary of the visible band.
+    const pTop = this.pinnedTopNodes();
+    const pBot = this.pinnedBottomNodes();
+    if (pTop.length) {
+      flat = [
+        ...pTop.map<FlattenedRow<TRow>>((node) => ({ kind: 'leaf', node, id: node.id, level: 0, pinned: 'top' })),
+        ...flat,
+      ];
+    }
+    if (pBot.length) {
+      flat = [
+        ...flat,
+        ...pBot.map<FlattenedRow<TRow>>((node) => ({ kind: 'leaf', node, id: node.id, level: 0, pinned: 'bottom' })),
+      ];
+    }
     return flat;
   });
 
@@ -579,14 +629,22 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     return this.userPageSize() ?? this.paginationPageSize();
   });
 
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalDisplayed() / Math.max(1, this.effectivePageSize()))));
+  readonly totalPages = computed(() => {
+    // Pinned rows are not paginated, so divide only the middle band.
+    const middle = this.displayedRows().filter((r) => !r.pinned).length;
+    return Math.max(1, Math.ceil(middle / Math.max(1, this.effectivePageSize())));
+  });
 
   readonly pagedRows = computed<FlattenedRow<TRow>[]>(() => {
     const rows = this.displayedRows();
     if (!this.pagination()) return rows;
+    // Keep pinned rows visible on every page; only paginate the middle band.
+    const top = rows.filter((r) => r.pinned === 'top');
+    const bottom = rows.filter((r) => r.pinned === 'bottom');
+    const middle = rows.filter((r) => !r.pinned);
     const size = this.effectivePageSize();
     const page = Math.min(this.currentPage(), this.totalPages() - 1);
-    return rows.slice(page * size, page * size + size);
+    return [...top, ...middle.slice(page * size, page * size + size), ...bottom];
   });
 
   /** Cumulative offset for each paged row (accounts for variable detail heights). */
@@ -830,6 +888,28 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       untracked(() => {
         this.infiniteFetched.clear();
         this.fetchInfiniteBlock(0);
+      });
+    });
+
+    // Auto-fit columns whose width was not specified by the consumer.
+    // Runs once per column when data first becomes available. Columns with an
+    // explicit `width`, a `flex`, or a user-resized state are skipped.
+    effect(() => {
+      const nodes = this.sortedFilteredNodes();
+      if (!nodes.length) return;
+      untracked(() => {
+        const cols = this.columnsWithState();
+        const state = new Map(this.internalColumnState());
+        let changed = false;
+        for (const c of cols) {
+          if (c.widthExplicit) continue;
+          if (c.flex) continue;
+          if (state.get(c.colId)?.width != null) continue;
+          const w = this.computeAutoWidth(c);
+          state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: w });
+          changed = true;
+        }
+        if (changed) this.internalColumnState.set(state);
       });
     });
   }
@@ -1886,7 +1966,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         self.localRowData.set(rows.slice());
       },
       getRowData() { return self.localRowData() ?? self.rowData(); },
-      applyTransaction({ add, remove, update }) {
+      applyTransaction(tx) {
+        const { add, remove, update, addIndex } = tx;
         const idFn = self.getRowId();
         const idOf = (r: TRow): string => idFn ? idFn(r) : ((r as { id?: string | number }).id != null ? String((r as { id: string | number }).id) : '');
         const current = (self.localRowData() ?? self.rowData()).slice();
@@ -1903,8 +1984,51 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
             if (i >= 0) current[i] = { ...current[i]!, ...u };
           }
         }
-        if (add?.length) current.push(...add);
+        if (add?.length) {
+          if (typeof addIndex === 'number') current.splice(addIndex, 0, ...add);
+          else current.push(...add);
+        }
         self.localRowData.set(current);
+        return { add: add?.length ?? 0, remove: remove?.length ?? 0, update: update?.length ?? 0 };
+      },
+      /**
+       * Buffer a transaction; flushes via requestAnimationFrame so multiple calls in the same
+       * tick coalesce into a single grid update. Fires (asyncTransactionsFlushed) once after flush.
+       */
+      applyTransactionAsync(tx, callback) {
+        self.asyncTxQueue.push({ tx, callback });
+        if (self.asyncTxScheduled) return;
+        self.asyncTxScheduled = true;
+        const flush = () => {
+          self.asyncTxScheduled = false;
+          const queue = self.asyncTxQueue.slice();
+          self.asyncTxQueue.length = 0;
+          const results: { add: number; remove: number; update: number }[] = [];
+          for (const item of queue) {
+            const r = self.api.applyTransaction(item.tx) as { add: number; remove: number; update: number } | undefined;
+            const result = r ?? { add: item.tx.add?.length ?? 0, remove: item.tx.remove?.length ?? 0, update: item.tx.update?.length ?? 0 };
+            results.push(result);
+            try { item.callback?.(result); } catch (e) { console.error(e); }
+          }
+          self.asyncTransactionsFlushed.emit({ results });
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(flush);
+        else setTimeout(flush, 16);
+      },
+      flushAsyncTransactions() {
+        if (!self.asyncTxScheduled) return;
+        // Force-flush synchronously by triggering the queued callback path
+        self.asyncTxScheduled = false;
+        const queue = self.asyncTxQueue.slice();
+        self.asyncTxQueue.length = 0;
+        const results: { add: number; remove: number; update: number }[] = [];
+        for (const item of queue) {
+          const r = self.api.applyTransaction(item.tx) as { add: number; remove: number; update: number } | undefined;
+          const result = r ?? { add: item.tx.add?.length ?? 0, remove: item.tx.remove?.length ?? 0, update: item.tx.update?.length ?? 0 };
+          results.push(result);
+          try { item.callback?.(result); } catch (e) { console.error(e); }
+        }
+        self.asyncTransactionsFlushed.emit({ results });
       },
 
       setColumnDefs() { throw new Error('setColumnDefs unsupported — rebind [columnDefs]'); },
@@ -2214,6 +2338,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         };
       },
 
+      toMcpServer(opts) {
+        return self.buildMcpAdapter(opts);
+      },
+
       // ---- excel export ----
       exportDataAsExcel(opts) {
         const xml = self.api.getDataAsExcelXml(opts);
@@ -2335,11 +2463,102 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   private computeAutoWidth(col: ResolvedColumn<TRow>): number {
     const padding = 32;
     let max = (col.headerName?.length ?? 0) * 8 + padding;
+    // Sample the first 200 visible rows — proportional-font heuristic, ~7px/char.
     for (const n of this.sortedFilteredNodes().slice(0, 200)) {
       const s = this.cellText(col, n);
       max = Math.max(max, s.length * 7 + padding);
     }
-    return Math.min(col.maxWidth ?? 600, Math.max(col.minWidth ?? 40, max));
+    // No implicit cap — auto-fit must show full text without wrapping per the
+    // spec. Consumers cap explicitly via ColumnDef.maxWidth if they need to.
+    const cap = col.maxWidth ?? Number.POSITIVE_INFINITY;
+    return Math.min(cap, Math.max(col.minWidth ?? 40, max));
+  }
+
+  /**
+   * Builds an MCP (Model Context Protocol) adapter that exposes the grid's schema and a
+   * curated set of tools (read-only inspect + state mutation) to an AI agent.
+   * Hand the returned object to your MCP server framework of choice.
+   */
+  private buildMcpAdapter(opts?: { gridId?: string; description?: string }): import('./types').McpServerAdapter<TRow> {
+    const self = this;
+    const gridId = opts?.gridId ?? `glass-grid-${Math.random().toString(36).slice(2, 8)}`;
+    const description = opts?.description ?? 'A glassGRID data grid. Inspect schema, read rows, set filters / sort / grouping, and export.';
+    return {
+      gridId,
+      description,
+      schema: () => self.api.getStructuredSchema(),
+      tools: () => [
+        {
+          name: 'get_schema',
+          description: 'Get the current schema (columns, sort, filter, grouping, row count).',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'get_rows',
+          description: 'Return up to `limit` rows starting at `offset` (after sort + filter).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              offset: { type: 'number', description: 'Row offset (default 0).' },
+              limit: { type: 'number', description: 'Max rows to return (default 50, max 500).' },
+            },
+          },
+        },
+        {
+          name: 'set_quick_filter',
+          description: 'Apply a quick-filter text across all visible columns.',
+          inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+        },
+        {
+          name: 'set_filter_model',
+          description: 'Set the column filter model (per-column conditions). Accepts an object keyed by colId.',
+          inputSchema: { type: 'object', properties: { model: { type: 'object' } }, required: ['model'] },
+        },
+        {
+          name: 'set_sort_model',
+          description: 'Sort by one or more columns. Accepts an array of { colId, sort }.',
+          inputSchema: { type: 'object', properties: { model: { type: 'array' } }, required: ['model'] },
+        },
+        {
+          name: 'set_row_group',
+          description: 'Group rows by one or more columns (in order).',
+          inputSchema: { type: 'object', properties: { colIds: { type: 'array', items: { type: 'string' } } }, required: ['colIds'] },
+        },
+        {
+          name: 'export_csv',
+          description: 'Return the current (sorted + filtered) view as a CSV string.',
+          inputSchema: { type: 'object', properties: { onlySelected: { type: 'boolean' } } },
+        },
+        {
+          name: 'select_rows',
+          description: 'Select rows by stable id. Replaces the current selection.',
+          inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' } } }, required: ['ids'] },
+        },
+      ],
+      invoke: async (toolName, args) => {
+        switch (toolName) {
+          case 'get_schema': return self.api.getStructuredSchema();
+          case 'get_rows': {
+            const offset = Math.max(0, Number(args['offset'] ?? 0));
+            const limit = Math.min(500, Math.max(1, Number(args['limit'] ?? 50)));
+            const rows = self.sortedFilteredNodes().slice(offset, offset + limit).map((n) => n.data);
+            return { offset, limit, rows, total: self.sortedFilteredNodes().length };
+          }
+          case 'set_quick_filter': self.api.setQuickFilter(String(args['text'] ?? '')); return { ok: true };
+          case 'set_filter_model': self.api.setFilterModel(args['model'] as never); return { ok: true };
+          case 'set_sort_model': self.api.setSortModel(args['model'] as never); return { ok: true };
+          case 'set_row_group': self.api.setRowGroupColumns((args['colIds'] as string[]) ?? []); return { ok: true };
+          case 'export_csv': return { csv: self.api.getDataAsCsv({ onlySelected: !!args['onlySelected'] }) };
+          case 'select_rows': {
+            const ids = new Set((args['ids'] as string[]) ?? []);
+            const matched = self.nodes().filter((n) => ids.has(n.id));
+            self.selectedIds.set(new Set(matched.map((n) => n.id)));
+            return { selected: matched.length };
+          }
+          default: throw new Error(`Unknown MCP tool: ${toolName}`);
+        }
+      },
+    };
   }
 
   // ===== misc helpers used by template =====
