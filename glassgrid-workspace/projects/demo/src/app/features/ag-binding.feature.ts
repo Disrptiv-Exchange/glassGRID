@@ -174,16 +174,6 @@ export class AgBindingFeature implements OnInit {
     return v instanceof Date ? v.toISOString().slice(0, 10) : '';
   }
 
-  // mirrors the consumer's OrderNumberRenderer: returns a vanilla <span>
-  OrderNumberLikeRenderer(params: CellRendererParams<Employee>): HTMLElement {
-    if (!params?.data) return document.createElement('span');
-    const span = document.createElement('span');
-    span.className = 'underline cursor-pointer';
-    span.setAttribute('data-testid', `pinned-order-${(params.data as any).id}`);
-    span.textContent = `WO${String((params.data as any).id ?? '').padStart(8, '0')}`;
-    return span;
-  }
-
   // mirrors the sample's renderer pattern — returns an HTMLElement built via Renderer2
   EditHyperLink(params: CellRendererParams<Employee>): HTMLElement | string {
     if (!params.data) return '';

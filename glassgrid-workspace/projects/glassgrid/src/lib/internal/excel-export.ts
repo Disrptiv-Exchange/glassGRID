@@ -37,8 +37,12 @@ export function toExcelXml<TRow>(
     }
     out.push('      </Row>');
   }
+  const images: { row: number; col: number; dataUrl: string; w: number; h: number }[] = [];
+  let excelRowIndex = opts.skipHeader ? 0 : 1; // 0-based, header counts as row 0
+
   for (const node of nodes) {
     out.push('      <Row>');
+    let colIdx = 0;
     for (const c of selectedCols) {
       let value: unknown = getCellValue(c, node);
       if (opts.processCellCallback) value = opts.processCellCallback({ data: node.data, node, colDef: c, value });
@@ -56,11 +60,53 @@ export function toExcelXml<TRow>(
       } else {
         formatted = esc(formatCellValue(c, node, value));
       }
-      out.push(`        <Cell><Data ss:Type="${type}">${formatted}</Data></Cell>`);
+      const note = opts.noteFor?.({ data: node.data, node, colDef: c, value });
+      const link = opts.hyperlinkFor?.({ data: node.data, node, colDef: c, value });
+      const img = opts.imageFor?.({ data: node.data, node, colDef: c, value });
+      const attrs: string[] = [];
+      if (link) attrs.push(`ss:HRef="${esc(link)}"`);
+      const attrStr = attrs.length ? ' ' + attrs.join(' ') : '';
+      out.push(`        <Cell${attrStr}>${note ? `<Comment><Data ss:Type="String">${esc(note)}</Data></Comment>` : ''}<Data ss:Type="${type}">${formatted}</Data></Cell>`);
+      if (img?.dataUrl) {
+        images.push({ row: excelRowIndex, col: colIdx, dataUrl: img.dataUrl, w: img.width ?? 64, h: img.height ?? 64 });
+      }
+      colIdx++;
     }
     out.push('      </Row>');
+    excelRowIndex++;
+
+    // master / detail export
+    if (opts.detailRowProvider) {
+      const detail = opts.detailRowProvider(node.data);
+      if (detail?.length) {
+        for (const detailRow of detail) {
+          out.push('      <Row>');
+          for (const cell of detailRow) {
+            out.push(`        <Cell><Data ss:Type="String">${esc(cell ?? '')}</Data></Cell>`);
+          }
+          out.push('      </Row>');
+          excelRowIndex++;
+        }
+      }
+    }
   }
   out.push('    </Table>');
+
+  // images — emit as anchored shapes (Excel 2003 XML syntax)
+  if (images.length) {
+    out.push(`    <x:WorksheetOptions xmlns:x="urn:schemas-microsoft-com:office:excel">`);
+    for (const img of images) {
+      out.push(`      <Image>`);
+      out.push(`        <RowIndex>${img.row}</RowIndex>`);
+      out.push(`        <ColumnIndex>${img.col}</ColumnIndex>`);
+      out.push(`        <Width>${img.w}</Width>`);
+      out.push(`        <Height>${img.h}</Height>`);
+      out.push(`        <Source>${img.dataUrl}</Source>`);
+      out.push(`      </Image>`);
+    }
+    out.push(`    </x:WorksheetOptions>`);
+  }
+
   out.push('  </Worksheet>');
   out.push('</Workbook>');
   return out.join('\n');

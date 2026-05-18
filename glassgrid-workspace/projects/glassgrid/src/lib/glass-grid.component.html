@@ -307,6 +307,8 @@
               [attr.aria-selected]="entry.row.node.selected ? 'true' : null"
               [class.gg-row-selected]="entry.row.node.selected"
               [class.gg-row-odd]="entry.index % 2 === 1"
+              [class.gg-row-pinned-top]="entry.row.pinned === 'top'"
+              [class.gg-row-pinned-bottom]="entry.row.pinned === 'bottom'"
               [class.gg-row-dragging]="rowDragSource()?.rowId === entry.row.node.id"
               [class.gg-row-drop-target]="rowDragSource() && rowDragSource()?.overIndex === entry.index"
               [style.height.px]="entry.height"

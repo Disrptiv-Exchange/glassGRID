@@ -298,3 +298,41 @@ Items still on `ROADMAP.md`:
 - **Phase 6**: full-width rows, colSpan/rowSpan, row resize handle, theme builder, Google Fonts auto-load, high-contrast theme.
 
 These remain implementable on top of the current architecture (signals + flat displayedRows pipeline + provider-style feature modules) without breaking the public API.
+
+---
+
+## Latest batch (2026-05-15) — closing out the remaining fully-pending items
+
+### Core data
+- **`applyTransactionAsync(tx, callback?)` + `asyncTransactionsFlushed` event** — buffer multiple transactions in one tick; `requestAnimationFrame` flushes them as a single grid update. Callback fires per-tx with `{ add, remove, update }` counts; `flushAsyncTransactions()` forces a sync flush.
+- **Pinned top / bottom rows** — `[pinnedTopRowData]` / `[pinnedBottomRowData]` materialise as bands that prepend / append the displayed-rows array. Pagination only paginates the *middle* band; filtering and sorting skip the pinned bands. CSS classes `.gg-row-pinned-top` / `.gg-row-pinned-bottom`.
+- **`firstDataRendered` event** — fires once after the first non-empty render.
+
+### Columns
+- **Column types template (`[columnTypes]` + `ColumnDef.type`)** — define reusable defaults under named keys; refer to them from a column via a string or array (`type: ['numeric', 'currency']`). Composition order: `defaultColDef` → each type → per-column props.
+- **Cell renderer selector** — `cellRendererSelector(params)` returns a `{ component, params }` shape per row for dynamic renderer choice.
+- **Custom header component (`headerComponent`)** — function returning inline HTML, injected into the column header label.
+
+### Header
+- **`[wrapHeaderText]`** — wraps long header text across lines via CSS hook `data-wrap-header="true"`.
+- **`[autoHeaderHeight]`** — header row grows to fit the tallest wrapped header.
+
+### Rows
+- **`[wrapText]` / `[autoHeight]` per ColumnDef** — CSS class hooks `gg-wrap-text` / `gg-auto-height` allow rows to grow vertically and content to wrap.
+- **`[stickyGroupRows]`** — the open group's header row sticks to the top of the viewport while you scroll its children.
+- **`showOpenedGroup` / `groupHideOpenParents`** — display modes that hide the parent group row when it's expanded so children visually "replace" it.
+
+### Excel export — round-trip
+- **Cell notes** (`opts.noteFor`) — comments serialized into the `<Comment>` cell element.
+- **Hyperlinks** (`opts.hyperlinkFor`) — `ss:HRef` attribute per cell.
+- **Anchored images** (`opts.imageFor`) — Base64 data URLs anchored at the cell position with width/height.
+- **Detail rows** (`opts.detailRowProvider`) — emit extra rows immediately after each leaf row for master/detail export.
+
+### AI / MCP
+- **`gridApi.toMcpServer({ gridId?, description? })`** — returns a `McpServerAdapter` exposing `gridId`, `description`, `schema()`, `tools()`, and an async `invoke(toolName, args)`. Eight built-in tools:
+  - `get_schema` — columns + sort + filter + group state + row count.
+  - `get_rows` — paginated read of the sorted-filtered band.
+  - `set_quick_filter`, `set_filter_model`, `set_sort_model`, `set_row_group`.
+  - `export_csv` — return CSV string (optionally only-selected).
+  - `select_rows` — by stable row id.
+  Hand this object to your MCP server framework of choice to expose the grid to an agent.

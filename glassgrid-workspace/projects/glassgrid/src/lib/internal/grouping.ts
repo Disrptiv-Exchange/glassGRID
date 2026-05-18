@@ -36,6 +36,8 @@ export interface FlattenedRow<TRow = unknown> {
   /** Composite stable id used for trackBy. */
   id: string;
   level: number;
+  /** When 'top' / 'bottom', this is a pinned row (excluded from pagination and stickier than normal). */
+  pinned?: 'top' | 'bottom';
 }
 
 /**

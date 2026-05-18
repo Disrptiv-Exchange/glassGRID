@@ -951,10 +951,19 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     const host = this.el?.nativeElement as HTMLElement | undefined;
     if (!host) return;
     const cols = this.columnsWithState();
-    const candidates = cols.filter((c) =>
+    // Auto-fit candidates: cell-driven widening only runs for columns the user
+    // didn't size explicitly and that aren't flex-managed.
+    const autoFitCandidates = cols.filter((c) =>
       !c.widthExplicit && !c.flex && !this.autoFitMeasured.has(c.colId),
     );
-    if (!candidates.length) return;
+    // Header-fit candidates: every non-flex column gets a header-width floor so
+    // a label can never be truncated, even when the consumer set an explicit
+    // `width: 120` and the header text needs 122px. We run this once per column
+    // (same as auto-fit) so subsequent user resizes aren't fought.
+    const headerFitCandidates = cols.filter(
+      (c) => !c.flex && !this.autoFitMeasured.has(c.colId),
+    );
+    if (!autoFitCandidates.length && !headerFitCandidates.length) return;
     const renderedCols = this.renderedColumns();
     const colByAriaIndex = new Map<number, string>();
     renderedCols.forEach((c, i) => colByAriaIndex.set(i + 1, c.colId));
@@ -974,13 +983,20 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       probe.replaceChildren();
       return w;
     };
-    const maxWidth = new Map<string, number>();
-    const consider = (colId: string, w: number) => {
+    const headerWidth = new Map<string, number>();
+    const cellWidth = new Map<string, number>();
+    const considerHeader = (colId: string, w: number) => {
       if (!Number.isFinite(w) || w <= 0) return;
-      maxWidth.set(colId, Math.max(maxWidth.get(colId) ?? 0, w));
+      headerWidth.set(colId, Math.max(headerWidth.get(colId) ?? 0, w));
+    };
+    const considerCell = (colId: string, w: number) => {
+      if (!Number.isFinite(w) || w <= 0) return;
+      cellWidth.set(colId, Math.max(cellWidth.get(colId) ?? 0, w));
     };
     try {
-      // Headers
+      // Headers: sum every visible child's natural width (label, sort indicator,
+      // filter button, checkbox) + flex gaps + the cell's own padding. The
+      // resize handle is absolutely positioned so it doesn't contribute.
       const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
       headerCells.forEach((hc) => {
         const idx = Number(hc.getAttribute('aria-colindex'));
@@ -988,10 +1004,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         if (!colId) return;
         const cs = getComputedStyle(hc);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-        const filterBtn = hc.querySelector<HTMLElement>('.gg-filter-btn');
-        const filterW = filterBtn ? filterBtn.offsetWidth + 6 : 0;
-        const labelW = measureNatural(hc.querySelector('.gg-header-label'));
-        consider(colId, labelW + filterW + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+        const gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
+        const children = Array.from(hc.children).filter(
+          (c): c is HTMLElement =>
+            c instanceof HTMLElement &&
+            !c.classList.contains('gg-resize-handle') &&
+            getComputedStyle(c).display !== 'none',
+        );
+        let sum = 0;
+        for (const child of children) sum += measureNatural(child);
+        const total = sum + Math.max(0, children.length - 1) * gap + padding;
+        considerHeader(colId, total + GlassGridComponent.AUTO_FIT_BUFFER_PX);
       });
       // Body cells — measure whatever the consumer rendered (text, renderer
       // HTML, or component output). For component outputs, the cell's direct
@@ -1008,17 +1031,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
           cell.querySelector<HTMLElement>(':scope > .gg-cell-renderer, :scope > .gg-cell-text') ??
           (cell.firstElementChild as HTMLElement | null);
         const w = measureNatural(inner);
-        consider(colId, w + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+        considerCell(colId, w + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
       });
     } finally {
       probe.remove();
     }
-    // Apply: widen the column if measurement > current width, respecting maxWidth.
+    // Apply widths. Two passes:
+    //   1. Auto-fit candidates take max(headerWidth, cellWidth) — full content fit.
+    //   2. Every non-flex column (including explicit-width ones) takes at least
+    //      headerWidth so the header label never truncates.
     const state = new Map(this.internalColumnState());
     let changed = false;
-    for (const c of candidates) {
-      const measured = maxWidth.get(c.colId);
-      if (measured == null) continue;
+    const widen = (c: typeof cols[number], measured: number) => {
       const cap = c.maxWidth ?? Number.POSITIVE_INFINITY;
       const target = Math.min(cap, Math.max(c.minWidth ?? 40, Math.ceil(measured)));
       const current = state.get(c.colId)?.width ?? c.width;
@@ -1026,6 +1050,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
         state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: target });
         changed = true;
       }
+    };
+    for (const c of autoFitCandidates) {
+      const h = headerWidth.get(c.colId) ?? 0;
+      const b = cellWidth.get(c.colId) ?? 0;
+      const measured = Math.max(h, b);
+      if (measured > 0) widen(c, measured);
+      this.autoFitMeasured.add(c.colId);
+    }
+    for (const c of headerFitCandidates) {
+      if (autoFitCandidates.includes(c)) continue; // already handled above
+      const h = headerWidth.get(c.colId);
+      if (h != null) widen(c, h);
       this.autoFitMeasured.add(c.colId);
     }
     if (changed) this.internalColumnState.set(state);

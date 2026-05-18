@@ -161,7 +161,17 @@ export interface ColumnDef<TRow = unknown, TValue = unknown> {
   tooltipField?: keyof TRow & string;
   tooltipValueGetter?: (params: ValueGetterParams<TRow>) => string | null | undefined;
   suppressKeyboardEvent?: (params: { event: KeyboardEvent; data: TRow }) => boolean;
+
+  /**
+   * Column-type template key(s) that pull defaults from the grid's `[columnTypes]` map.
+   * Accepts a single key or comma/space-separated list of keys; later types override earlier ones,
+   * and explicit per-column properties always win.
+   */
+  type?: string | string[];
 }
+
+/** Map of named column "types" — reusable defaults referenced by `ColumnDef.type`. */
+export type ColumnTypeMap<TRow = unknown> = Record<string, Partial<ColumnDef<TRow>>>;
 
 export type CellRenderer<TRow = unknown, TValue = unknown> =
   | string
@@ -275,6 +285,50 @@ export interface GridOptions<TRow = unknown> {
   columnDefs?: (ColumnDef<TRow> | ColumnGroupDef<TRow>)[];
   /** Initial datasource for `rowModelType: 'infinite'`. */
   datasource?: IDatasource<TRow>;
+}
+
+// ---- async transactions ----
+export interface RowDataTransaction<TRow = unknown> {
+  add?: TRow[];
+  addIndex?: number;
+  remove?: TRow[];
+  update?: TRow[];
+}
+
+export interface AsyncTransactionsFlushedEvent<TRow = unknown> {
+  results: { add: number; remove: number; update: number }[];
+}
+
+// ---- MCP server descriptors ----
+/**
+ * A JSON Schema-like description of a glassGRID grid, suitable for exposure to
+ * an MCP (Model Context Protocol) server so AI agents can introspect and operate
+ * on the grid.
+ */
+export interface McpToolDescriptor {
+  /** Tool name as exposed to the MCP client. */
+  name: string;
+  /** Short, agent-readable description. */
+  description: string;
+  /** JSON-schema for the tool's input. */
+  inputSchema: {
+    type: 'object';
+    properties: Record<string, { type: string; description?: string; enum?: unknown[]; items?: unknown } | undefined>;
+    required?: string[];
+  };
+}
+
+export interface McpServerAdapter<TRow = unknown> {
+  /** Stable identifier for this grid (used by AI agents to address it). */
+  gridId: string;
+  /** Human-readable summary of the grid. */
+  description: string;
+  /** Returns the current grid schema (columns + state). */
+  schema: () => GridSchema;
+  /** Returns the list of tools the grid offers to an MCP client. */
+  tools: () => McpToolDescriptor[];
+  /** Invoke a named tool with JSON args. */
+  invoke: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
 }
 
 // ---- column groups ----
@@ -534,7 +588,14 @@ export interface GridApi<TRow = unknown> {
   // data
   setRowData(rows: TRow[]): void;
   getRowData(): TRow[];
-  applyTransaction(t: { add?: TRow[]; remove?: TRow[]; update?: TRow[] }): void;
+  applyTransaction(t: RowDataTransaction<TRow>): { add: number; remove: number; update: number } | void;
+  /** Buffer a transaction; flushes via rAF coalescing multiple calls into one update. */
+  applyTransactionAsync(t: RowDataTransaction<TRow>, callback?: (res: { add: number; remove: number; update: number }) => void): void;
+  /** Force-flush any pending async transactions immediately. */
+  flushAsyncTransactions(): void;
+
+  /** Build an MCP-compatible adapter exposing the grid's schema + tools to an AI agent. */
+  toMcpServer(opts?: { gridId?: string; description?: string }): McpServerAdapter<TRow>;
 
   // columns
   setColumnDefs(defs: ColumnDef<TRow>[]): void;
@@ -669,4 +730,15 @@ export interface GridApi<TRow = unknown> {
 
 export interface ExcelExportOptions<TRow = unknown> extends CsvExportOptions<TRow> {
   sheetName?: string;
+  /** Optional callback returning a cell comment / note string. */
+  noteFor?: (params: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow>; value: unknown }) => string | null | undefined;
+  /** Optional callback returning a hyperlink URL for a cell. */
+  hyperlinkFor?: (params: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow>; value: unknown }) => string | null | undefined;
+  /** Optional callback returning an image (Base64 data: URL) anchored at the cell. */
+  imageFor?: (params: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow>; value: unknown }) => { dataUrl: string; width?: number; height?: number } | null | undefined;
+  /**
+   * Optional callback called once per leaf row that returns rows of additional detail
+   * to emit immediately after the row (for master/detail export). The cells span all columns.
+   */
+  detailRowProvider?: (data: TRow) => string[][] | null | undefined;
 }

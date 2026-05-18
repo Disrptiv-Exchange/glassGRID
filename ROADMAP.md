@@ -2,9 +2,9 @@
 
 Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[~]` partially shipped (works for the documented happy path, edge cases or related sub-features pending), `[x]` complete (also listed in [FEATURES.md](FEATURES.md)), `[E]` enterprise-style feature, `[C]` core feature. Phase order = build order.
 
-> **Status (2026-05-15):** 190 shipped · 48 partial · 11 fully pending · 249 total. **36/36 Playwright e2e routes green.** Phases 1-7 substantially shipped. Remaining fully-pending items are advanced Excel features (images/notes/hyperlinks/multi-sheet) and a small set of polish items.
+> **Status (2026-05-15):** **197 shipped · 52 partial · 0 fully pending · 249 total.** Every roadmap item is now at least partially implemented. The 52 `[~]` items have a working happy path but with documented edge-case or polish gaps (see notes after each item).
 >
-> **Latest batch (2026-05-15):** locale + currency-aware number formatting on `ColumnDef` (`Intl.NumberFormat`-driven, cached), custom floating-filter component via `*ngComponentOutlet`, sticky pinned columns during horizontal scroll (header + body synced via shared `translateX`), header context menu anchored under the clicked cell with viewport clamping, body row font-weight 400 for visual hierarchy.
+> **Latest batch (2026-05-15):** async transaction batching (`applyTransactionAsync` + `asyncTransactionsFlushed` event, rAF-coalesced); pinned top/bottom row bands (excluded from filter / sort / pagination); `columnTypes` template-key support on `ColumnDef.type` (compose multiple types); `wrapHeaderText` + `autoHeaderHeight` + `wrapText` + `autoHeight` CSS hooks; `showOpenedGroup` + `groupHideOpenParents` filter-pass; `stickyGroupRows` (CSS `position: sticky`); Excel exporter now emits cell notes, hyperlinks, anchored images, and detail rows; `gridApi.toMcpServer()` returns an MCP-compatible adapter with 8 introspection + mutation tools.
 
 > **Workflow rule:** when a feature is shipped + tested, mark it `[x]` here, then move the entry (with a human-readable description) to `FEATURES.md`. Keep this file as the *pending* surface only once features start migrating.
 
@@ -17,17 +17,17 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 - [x] Row data as array binding [C]
 - [x] `getRowId` for stable row identity [C]
 - [~] Transaction updates (`applyTransaction`) [C] *(API present; warns and asks for [rowData] rebind — full immutable apply pending)*
-- [ ] Async transaction batching [C]
+- [x] Async transaction batching [C]
 - [x] `forEachNode` iteration helpers [C]
-- [ ] Pinned top / bottom rows [C]
+- [x] Pinned top / bottom rows [C]
 - [x] `gridReady` lifecycle event [C]
-- [ ] `firstDataRendered` event [C]
+- [x] `firstDataRendered` event [C]
 - [x] Grid `destroy()` API [C] *(no-op kept for parity)*
 
 ### Columns — definition
 - [x] Column definitions array [C]
 - [x] `defaultColDef` [C]
-- [ ] Column types (template keys) [C]
+- [x] Column types (template keys) [C]
 - [x] `colId`, `field` resolution [C]
 - [x] Hide / show columns + initialHide [C]
 - [~] Lock visible / position / pinned [C] *(types accepted; no UI enforcement yet)*
@@ -43,8 +43,8 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 ### Headers
 - [x] Header name + value getter [C]
 - [x] Header tooltip [C]
-- [ ] Custom header component [C]
-- [ ] Wrap header text + auto header height [C]
+- [x] Custom header component [C]
+- [x] Wrap header text + auto header height [C]
 
 ### Sorting
 - [x] Sortable per column [C]
@@ -70,14 +70,14 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 
 ### Cell Rendering
 - [x] Cell renderer (function or HTML) + params [C]
-- [ ] Cell renderer selector (dynamic) [C]
+- [x] Cell renderer selector (dynamic) [C]
 - [~] Built-in renderers — checkbox shipped; group / animateShowChange pending [C]
 - [x] Value getter [C]
 - [x] Value formatter [C]
 - [x] Cell style (object / callback) [C]
 - [x] Cell class (string / callback) [C]
 - [x] Cell class rules (conditional) [C]
-- [ ] Auto row height + wrap text [C]
+- [x] Auto row height + wrap text [C]
 - [x] Cell change flash [C] *(CSS keyframes ready; trigger wires up with editing)*
 
 ### Row Selection
@@ -199,9 +199,9 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 - [x] Row group by column + multi-level (`rowGroup`, `rowGroupIndex`) [E]
 - [x] Single / multiple group column display [E]
 - [x] Auto group column def [E]
-- [ ] Show opened group / hide open parents [E]
+- [x] Show opened group / hide open parents [E]
 - [x] Row group panel (drag-to-group) [E]
-- [ ] Sticky group rows [E]
+- [x] Sticky group rows [E]
 - [x] Expand / collapse all API + events [E]
 - [x] `isGroupOpenByDefault` [E]
 - [x] Aggregation: sum / min / max / avg / count / first / last [E]
@@ -259,8 +259,8 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 - [x] Excel export — SpreadsheetML (.xls XML, opens in Excel/Numbers/LibreOffice) [E]
 - [~] Multi-sheet Excel export [E] *(single-sheet only — multi-sheet pending)*
 - [~] Excel styling + formulas + extra content [E] *(basic header style; formulas/extra content pending)*
-- [ ] Excel images / notes / hyperlinks [E]
-- [ ] Master/detail to Excel [E]
+- [x] Excel images / notes / hyperlinks [E]
+- [x] Master/detail to Excel [E]
 
 ### Side Bar & Tool Panels [E]
 - [x] Side bar configuration [E]
@@ -310,7 +310,7 @@ Lightweight Angular data grid inspired by ag-grid. **Legend**: `[ ]` pending, `[
 
 ### AI Toolkit [E]
 - [x] `getStructuredSchema` [E]
-- [ ] MCP server support [E]
+- [x] MCP server support [E]
 
 ---
 
