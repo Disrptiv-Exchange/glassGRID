@@ -37,6 +37,8 @@ const routes = [
   'floating-filter-component',
   // batch 7: fitCellContents auto-size strategy
   'fit-cell-contents',
+  // batch 8: async-data auto-fit (v0.4.17 regression fixture)
+  'auto-fit-async',
 ];
 
 const filter = process.argv[2];

@@ -137,6 +137,49 @@ assert(
   `viewport=${viewport.vpWidth}px, columns=${viewport.total}px, gap=${fcGap}px`,
 );
 
+// --- Scenarios 8-10: async data arrival (v0.4.17 regression fixture) -----
+// The /auto-fit-async route mounts with empty rowData and pushes data 250ms
+// later. Auto-fit must NOT finalise on the empty-cell rAF probe; it must
+// re-measure once cells render. Before v0.4.17 the "Status" column would
+// stay locked at ~60px ("STATUS" header) and truncate "Order Approved",
+// and the "Company" column would stay at ~80px and truncate "P.T. Multi
+// Bintang Indonesia Tbk".
+await page.goto(`${BASE}/auto-fit-async`, { waitUntil: 'networkidle', timeout: 20_000 });
+await page.waitForSelector('glass-grid .gg-header-cell', { timeout: 10_000 });
+// Wait for the row data to arrive (250ms) + auto-fit re-measure (one frame).
+await page.waitForSelector('glass-grid .gg-body .gg-cell', { timeout: 10_000 });
+await page.waitForTimeout(600);
+
+const asyncHeaders = await probeHeaders();
+const asyncByText = Object.fromEntries(asyncHeaders.map((h) => [h.text, h]));
+
+// S8: short header / long cell — "Status" header is 6 chars, cells include
+// "Order Approved" (14 chars). Column must widen to fit the cells.
+const statusCol = asyncByText['Status'];
+assert(
+  'S8: async — short-header / long-cell column widens to fit cells',
+  !!statusCol && statusCol.width >= 110,
+  statusCol ? `Status width=${statusCol.width}px (expect ≥ 110px to fit "Order Approved")` : 'header not found',
+);
+
+// S9: short header / very long cell — "Company" header is 7 chars, cell is
+// "P.T. Multi Bintang Indonesia Tbk" (32 chars). Column must widen.
+const companyCol = asyncByText['Company'];
+assert(
+  'S9: async — extremely long cell still widens column past header',
+  !!companyCol && companyCol.width >= 200,
+  companyCol ? `Company width=${companyCol.width}px (expect ≥ 200px)` : 'header not found',
+);
+
+// S10: long header / short cell — "Ordered Quantity" (16 chars) vs "500".
+// Column must widen to fit the header even before cells arrive.
+const qtyCol = asyncByText['Ordered Quantity'];
+assert(
+  "S10: async — long-header / short-cell column widens to fit header",
+  !!qtyCol && qtyCol.width >= 140,
+  qtyCol ? `Ordered Quantity width=${qtyCol.width}px (expect ≥ 140px)` : 'header not found',
+);
+
 if (errors.length) {
   console.log(`\nCONSOLE ERRORS: ${errors.length}`);
   errors.slice(0, 3).forEach((e) => console.log(`  - ${e}`));

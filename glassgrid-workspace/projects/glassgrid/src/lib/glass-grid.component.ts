@@ -904,15 +904,22 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     });
 
     // Auto-fit columns whose width was not specified by the consumer.
-    // Runs once per column. Columns with an explicit `width`, a `flex`, or a
-    // user-resized state are skipped — explicit widths are honoured exactly
-    // (header truncates with ellipsis if the label can't fit).
+    // Columns with an explicit `width` or a `flex` are skipped — explicit
+    // widths are honoured exactly (header / cell ellipsis-truncate if the
+    // declared width is too small).
+    //
+    // The effect re-fires when rowData OR columnDefs change. That matters for
+    // infinite / server-side row models where data arrives after mount: the
+    // first run uses an empty cell sample and produces a header-only width,
+    // and subsequent runs widen the column once real cells are available. A
+    // column is "finalized" (locked from further auto-widening) only after
+    // the rAF DOM probe has measured it against real body cells —
+    // see measureAutoFitFromDom().
+    //
     // Phase 1 — synchronous char-length heuristic so first paint is close.
     // Phase 2 — after render, measure each cell's scrollWidth and widen if the
     // rendered output (e.g. from a `cellRenderer` that adds chrome) is wider
     // than the heuristic guessed. See scheduleMeasureAutoFit().
-    // Both phases run regardless of whether rowData is populated yet — headers
-    // alone are enough to size non-explicit columns.
     effect(() => {
       // Re-fire when row data changes (so cell content factors into the heuristic)
       // and when column defs change (so newly-added columns get measured too).
@@ -924,11 +931,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         for (const c of cols) {
           if (c.widthExplicit) continue;
           if (c.flex) continue;
-          if (this.autoFitMeasured.has(c.colId)) continue;
-          if (state.get(c.colId)?.width != null) continue;
+          if (this.autoFitFinalized.has(c.colId)) continue;
           const w = this.computeAutoWidth(c);
-          state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: w });
-          changed = true;
+          // Widen-only: never shrink past a prior measurement (this protects
+          // both the user's resize and the column's widest historical content).
+          const current = state.get(c.colId)?.width ?? c.width;
+          if (w > current) {
+            state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: w });
+            changed = true;
+          }
         }
         if (changed) this.internalColumnState.set(state);
         this.scheduleMeasureAutoFit();
@@ -936,8 +947,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     });
   }
 
-  /** colIds that have already been measured via DOM scrollWidth — measure-once semantics. */
-  private autoFitMeasured = new Set<string>();
+  /**
+   * colIds whose auto-fit has been finalized — i.e. the rAF DOM probe measured
+   * them against real body cells, not just headers. Header-only measurements
+   * do NOT add to this set, so the next data arrival (e.g. infinite / SSR
+   * datasource resolves) can still widen the column to fit the real cell.
+   */
+  private autoFitFinalized = new Set<string>();
   private autoFitMeasureScheduled = false;
   /** Buffer added to the measured content width to avoid one-pixel clipping on subsequent paints. */
   private static readonly AUTO_FIT_BUFFER_PX = 6;
@@ -972,8 +988,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // A column with an explicit `width` keeps that width regardless of how
     // long its header label or cell content is (header will ellipsis-truncate
     // if it doesn't fit). Flex columns are managed by the layout engine.
+    // We re-probe columns that haven't been *finalized* yet, which is critical
+    // for infinite / server-side row models: the first probe may run before
+    // any body cells exist (header-only measurement) and must NOT lock the
+    // column — we let the datasource resolve and re-probe with real cells.
     const autoFitCandidates = cols.filter((c) =>
-      !c.widthExplicit && !c.flex && !this.autoFitMeasured.has(c.colId),
+      !c.widthExplicit && !c.flex && !this.autoFitFinalized.has(c.colId),
     );
     if (!autoFitCandidates.length) return;
     const renderedCols = this.renderedColumns();
@@ -997,6 +1017,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     };
     const headerWidth = new Map<string, number>();
     const cellWidth = new Map<string, number>();
+    let hasBodyCells = false;
     const considerHeader = (colId: string, w: number) => {
       if (!Number.isFinite(w) || w <= 0) return;
       headerWidth.set(colId, Math.max(headerWidth.get(colId) ?? 0, w));
@@ -1032,6 +1053,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       // HTML, or component output). For component outputs, the cell's direct
       // child is the component's host element; clone that.
       const bodyCells = host.querySelectorAll<HTMLElement>('.gg-body .gg-cell[aria-colindex]');
+      hasBodyCells = bodyCells.length > 0;
       bodyCells.forEach((cell) => {
         const idx = Number(cell.getAttribute('aria-colindex'));
         const colId = colByAriaIndex.get(idx);
@@ -1065,12 +1087,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // Always size to max(headerWidth, cellWidth) so neither header label nor
     // cell content truncates. Consumers who want a hard width set `width:` on
     // the ColumnDef (which short-circuits this whole pass via widthExplicit).
+    //
+    // FINALIZATION: a column is only locked from further auto-widening once
+    // the rAF probe has measured it against REAL body cells. If `bodyCells`
+    // was empty (e.g. infinite mode pre-data), we widen to fit the header but
+    // leave the column open so the next data arrival can grow it to fit the
+    // cell content. `hasBodyCells` is set inside the probe loop above.
     for (const c of autoFitCandidates) {
       const h = headerWidth.get(c.colId) ?? 0;
       const b = cellWidth.get(c.colId) ?? 0;
       const measured = Math.max(h, b);
       if (measured > 0) widen(c, measured);
-      this.autoFitMeasured.add(c.colId);
+      if (hasBodyCells) this.autoFitFinalized.add(c.colId);
     }
     if (changed) this.internalColumnState.set(state);
   }

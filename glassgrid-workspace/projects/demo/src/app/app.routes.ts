@@ -39,6 +39,7 @@ export const routes: Routes = [
   { path: 'ag-binding', loadComponent: () => import('./features/ag-binding.feature').then((m) => m.AgBindingFeature) },
   { path: 'floating-filter-component', loadComponent: () => import('./features/floating-filter-component.feature').then((m) => m.FloatingFilterComponentFeature) },
   { path: 'fit-cell-contents', loadComponent: () => import('./features/fit-cell-contents.feature').then((m) => m.FitCellContentsFeature) },
+  { path: 'auto-fit-async', loadComponent: () => import('./features/auto-fit-async.feature').then((m) => m.AutoFitAsyncFeature) },
   { path: '**', redirectTo: '' },
 ];
 // touched
