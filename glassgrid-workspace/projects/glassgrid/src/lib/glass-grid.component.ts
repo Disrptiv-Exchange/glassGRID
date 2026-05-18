@@ -894,6 +894,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
     // Auto-fit columns whose width was not specified by the consumer.
     // Runs once per column when data first becomes available. Columns with an
     // explicit `width`, a `flex`, or a user-resized state are skipped.
+    // Phase 1 — synchronous char-length heuristic so first paint is close.
+    // Phase 2 — after render, measure each cell's scrollWidth and widen if the
+    // rendered output (e.g. from a `cellRenderer` that adds chrome) is wider
+    // than the heuristic guessed. See scheduleMeasureAutoFit().
     effect(() => {
       const nodes = this.sortedFilteredNodes();
       if (!nodes.length) return;
@@ -910,8 +914,91 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
           changed = true;
         }
         if (changed) this.internalColumnState.set(state);
+        this.scheduleMeasureAutoFit();
       });
     });
+  }
+
+  /** colIds that have already been measured via DOM scrollWidth — measure-once semantics. */
+  private autoFitMeasured = new Set<string>();
+  private autoFitMeasureScheduled = false;
+  /** Buffer added to the measured content width to avoid one-pixel clipping on subsequent paints. */
+  private static readonly AUTO_FIT_BUFFER_PX = 6;
+
+  private scheduleMeasureAutoFit() {
+    if (this.autoFitMeasureScheduled || typeof requestAnimationFrame !== 'function') return;
+    this.autoFitMeasureScheduled = true;
+    requestAnimationFrame(() => {
+      this.autoFitMeasureScheduled = false;
+      this.measureAutoFitFromDom();
+    });
+  }
+
+  /**
+   * Read the actual rendered width of each cell's content from the DOM and widen
+   * the column if needed. This catches cellRenderer outputs that add chrome
+   * (badges, icons, prefixes) which the synchronous char-length heuristic can't
+   * see. Runs after the next animation frame so the cells are laid out.
+   */
+  private measureAutoFitFromDom() {
+    const host = this.el?.nativeElement as HTMLElement | undefined;
+    if (!host) return;
+    const cols = this.columnsWithState();
+    const candidates = cols.filter((c) =>
+      !c.widthExplicit && !c.flex && !this.autoFitMeasured.has(c.colId),
+    );
+    if (!candidates.length) return;
+    // Build index → colId map for the currently rendered (visible) columns
+    const renderedCols = this.renderedColumns();
+    const colByAriaIndex = new Map<number, string>();
+    renderedCols.forEach((c, i) => colByAriaIndex.set(i + 1, c.colId));
+    const maxWidth = new Map<string, number>();
+    const consider = (colId: string, w: number) => {
+      if (!Number.isFinite(w) || w <= 0) return;
+      maxWidth.set(colId, Math.max(maxWidth.get(colId) ?? 0, w));
+    };
+    // Headers: measure label scrollWidth + filter button + padding
+    const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
+    headerCells.forEach((hc) => {
+      const idx = Number(hc.getAttribute('aria-colindex'));
+      const colId = colByAriaIndex.get(idx);
+      if (!colId) return;
+      const label = hc.querySelector<HTMLElement>('.gg-header-label');
+      const filterBtn = hc.querySelector<HTMLElement>('.gg-filter-btn');
+      const cs = getComputedStyle(hc);
+      const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      const labelW = label ? label.scrollWidth : 0;
+      const filterW = filterBtn ? filterBtn.offsetWidth + 6 : 0;
+      consider(colId, labelW + filterW + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+    });
+    // Body cells: measure the inner renderer or text scrollWidth + padding
+    const bodyCells = host.querySelectorAll<HTMLElement>('.gg-body .gg-cell[aria-colindex]');
+    bodyCells.forEach((cell) => {
+      const idx = Number(cell.getAttribute('aria-colindex'));
+      const colId = colByAriaIndex.get(idx);
+      if (!colId) return;
+      const inner = cell.querySelector<HTMLElement>(':scope > .gg-cell-renderer, :scope > .gg-cell-text');
+      if (!inner) return;
+      const cs = getComputedStyle(cell);
+      const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      consider(colId, inner.scrollWidth + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+    });
+    // Apply: widen the column if measurement > current width, respecting maxWidth.
+    const state = new Map(this.internalColumnState());
+    let changed = false;
+    for (const c of candidates) {
+      const measured = maxWidth.get(c.colId);
+      if (measured == null) continue;
+      const cap = c.maxWidth ?? Number.POSITIVE_INFINITY;
+      const target = Math.min(cap, Math.max(c.minWidth ?? 40, Math.ceil(measured)));
+      const current = state.get(c.colId)?.width ?? c.width;
+      if (target > current) {
+        state.set(c.colId, { ...(state.get(c.colId) ?? {}), width: target });
+        changed = true;
+      }
+      this.autoFitMeasured.add(c.colId);
+    }
+    if (changed) this.internalColumnState.set(state);
   }
 
   @ViewChild('viewport') viewportRef?: ElementRef<HTMLDivElement>;
