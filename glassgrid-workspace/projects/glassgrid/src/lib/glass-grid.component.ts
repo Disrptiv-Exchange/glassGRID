@@ -935,10 +935,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
   }
 
   /**
-   * Read the actual rendered width of each cell's content from the DOM and widen
-   * the column if needed. This catches cellRenderer outputs that add chrome
-   * (badges, icons, prefixes) which the synchronous char-length heuristic can't
-   * see. Runs after the next animation frame so the cells are laid out.
+   * Read the actual rendered width of each cell's content via an off-screen
+   * probe and widen the column if needed. This catches cellRenderer outputs
+   * that add chrome (badges, icons, prefixes) which the synchronous
+   * char-length heuristic can't see. Runs after the next animation frame so
+   * the cells are laid out and their content is in the DOM.
+   *
+   * Why a probe instead of measuring cells in place: `.gg-header-label` is
+   * `flex: 1 1 auto` and `.gg-cell-renderer` is an unstyled inline span, so
+   * scrollWidth on them either reports the flex-resolved width (label) or 0
+   * (inline span containing a block child). Cloning into a free-size
+   * inline-block probe gives the natural content width regardless.
    */
   private measureAutoFitFromDom() {
     const host = this.el?.nativeElement as HTMLElement | undefined;
@@ -948,41 +955,64 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> {
       !c.widthExplicit && !c.flex && !this.autoFitMeasured.has(c.colId),
     );
     if (!candidates.length) return;
-    // Build index → colId map for the currently rendered (visible) columns
     const renderedCols = this.renderedColumns();
     const colByAriaIndex = new Map<number, string>();
     renderedCols.forEach((c, i) => colByAriaIndex.set(i + 1, c.colId));
+    // Build a probe inside the host so it inherits the component's font /
+    // tokens; left:-99999px keeps it off-screen; display:inline-block lets
+    // children size to their natural width.
+    const probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText =
+      'position:absolute;left:-99999px;top:0;visibility:hidden;display:inline-block;' +
+      'white-space:nowrap;padding:0;border:0;margin:0;pointer-events:none;';
+    host.appendChild(probe);
+    const measureNatural = (el: Element | null): number => {
+      if (!el) return 0;
+      probe.replaceChildren(el.cloneNode(true));
+      const w = probe.scrollWidth;
+      probe.replaceChildren();
+      return w;
+    };
     const maxWidth = new Map<string, number>();
     const consider = (colId: string, w: number) => {
       if (!Number.isFinite(w) || w <= 0) return;
       maxWidth.set(colId, Math.max(maxWidth.get(colId) ?? 0, w));
     };
-    // Headers: measure label scrollWidth + filter button + padding
-    const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
-    headerCells.forEach((hc) => {
-      const idx = Number(hc.getAttribute('aria-colindex'));
-      const colId = colByAriaIndex.get(idx);
-      if (!colId) return;
-      const label = hc.querySelector<HTMLElement>('.gg-header-label');
-      const filterBtn = hc.querySelector<HTMLElement>('.gg-filter-btn');
-      const cs = getComputedStyle(hc);
-      const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-      const labelW = label ? label.scrollWidth : 0;
-      const filterW = filterBtn ? filterBtn.offsetWidth + 6 : 0;
-      consider(colId, labelW + filterW + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
-    });
-    // Body cells: measure the inner renderer or text scrollWidth + padding
-    const bodyCells = host.querySelectorAll<HTMLElement>('.gg-body .gg-cell[aria-colindex]');
-    bodyCells.forEach((cell) => {
-      const idx = Number(cell.getAttribute('aria-colindex'));
-      const colId = colByAriaIndex.get(idx);
-      if (!colId) return;
-      const inner = cell.querySelector<HTMLElement>(':scope > .gg-cell-renderer, :scope > .gg-cell-text');
-      if (!inner) return;
-      const cs = getComputedStyle(cell);
-      const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-      consider(colId, inner.scrollWidth + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
-    });
+    try {
+      // Headers
+      const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
+      headerCells.forEach((hc) => {
+        const idx = Number(hc.getAttribute('aria-colindex'));
+        const colId = colByAriaIndex.get(idx);
+        if (!colId) return;
+        const cs = getComputedStyle(hc);
+        const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const filterBtn = hc.querySelector<HTMLElement>('.gg-filter-btn');
+        const filterW = filterBtn ? filterBtn.offsetWidth + 6 : 0;
+        const labelW = measureNatural(hc.querySelector('.gg-header-label'));
+        consider(colId, labelW + filterW + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+      });
+      // Body cells — measure whatever the consumer rendered (text, renderer
+      // HTML, or component output). For component outputs, the cell's direct
+      // child is the component's host element; clone that.
+      const bodyCells = host.querySelectorAll<HTMLElement>('.gg-body .gg-cell[aria-colindex]');
+      bodyCells.forEach((cell) => {
+        const idx = Number(cell.getAttribute('aria-colindex'));
+        const colId = colByAriaIndex.get(idx);
+        if (!colId) return;
+        const cs = getComputedStyle(cell);
+        const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        // Prefer the named slot children; fall back to first element child.
+        const inner =
+          cell.querySelector<HTMLElement>(':scope > .gg-cell-renderer, :scope > .gg-cell-text') ??
+          (cell.firstElementChild as HTMLElement | null);
+        const w = measureNatural(inner);
+        consider(colId, w + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+      });
+    } finally {
+      probe.remove();
+    }
     // Apply: widen the column if measurement > current width, respecting maxWidth.
     const state = new Map(this.internalColumnState());
     let changed = false;
