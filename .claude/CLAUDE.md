@@ -2,15 +2,30 @@
 
 You are helping build **glassGRID**, a lightweight Angular data grid that aims to cover the feature surface of ag-grid while staying tree-shakeable, modern, and easy to style.
 
+> **New developer?** Run **`/onboardgridagent`** in Claude Code — it loads every piece of context (this file, ROADMAP, FEATURES, agents, install flow) and prints a current-state summary. The command is at [`.claude/commands/onboardgridagent.md`](.claude/commands/onboardgridagent.md).
+
+## Current release status (2026-05-18)
+
+- Published package: **`@disrptiv-exchange/glassgrid@0.4.8`** on GitHub Packages
+- Built against **Angular 20.1.6** (`@angular/core@20.1.6`, ng-packagr 20.1.0). Peer deps `>=20.0.0 <22.0.0`.
+- Single built-in theme: **glassRUN** (primary green `#329B2A`, Montserrat, 16–20px radii) — baked into the component's `:host`; no `@import` needed on the consumer side.
+- Bundle: 248 KB raw / **49 KB gzipped** (full feature surface).
+- 36/36 Playwright e2e routes green.
+
 ## Project layout
 
 ```
 glassGRID/
 ├── ROADMAP.md                  # pending features (source of truth for what's left)
 ├── FEATURES.md                 # shipped features with human-readable descriptions
-├── docs/                       # user manual + technical docs (generated at the end)
+├── README.md                   # repo entry point for external developers
+├── docs/                       # user manual: getting-started, api-reference, recipes, theming, …
+├── .github/workflows/
+│   └── publish.yml             # auto-publishes on v* tag push (GitHub Packages)
 ├── .claude/
 │   ├── CLAUDE.md               # this file
+│   ├── commands/
+│   │   └── onboardgridagent.md # `/onboardgridagent` slash command
 │   ├── agents/
 │   │   ├── grid-architect.md   # 15+ years senior grid engineer
 │   │   └── grid-tester.md      # Playwright-MCP-driven feature tester
@@ -23,6 +38,9 @@ glassGRID/
     ├── projects/
     │   ├── glassgrid/          # the library (publishable to npm)
     │   └── demo/               # demo + feature gallery app
+    ├── scripts/
+    │   ├── e2e.mjs             # 36-route Playwright suite
+    │   └── render-probe.mjs    # idle/scroll/hover CD profiler
     └── ...
 ```
 
@@ -50,6 +68,45 @@ glassGRID/
 3. **Test**: use the `grid-tester` agent (Playwright MCP) to exercise it with sample data. Don't move on until tests pass.
 4. **Promote**: mark the item `[x]` in `ROADMAP.md`, then `bash .claude/scripts/promote-feature.sh "<exact line text>"` (or move it manually) to `FEATURES.md` with a human-readable description.
 5. **Update memory**: if you learned something reusable (decision, gotcha, pattern), append to the appropriate agent's memory.
+
+## Publish + install flow
+
+Publishes to **GitHub Packages** as `@disrptiv-exchange/glassgrid`. Consumers need a `.npmrc` and a PAT with `read:packages`:
+
+```
+@disrptiv-exchange:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+To release a new version:
+
+```bash
+# 1. bump version in glassgrid-workspace/projects/glassgrid/package.json
+# 2. build + publish
+cd glassgrid-workspace && rm -rf dist/glassgrid && npx ng build glassgrid
+cd dist/glassgrid && {
+  echo "@disrptiv-exchange:registry=https://npm.pkg.github.com"
+  echo "//npm.pkg.github.com/:_authToken=$(gh auth token)"
+} > .npmrc && npm publish ; rm -f .npmrc
+# 3. commit + tag + push  (auto-publish workflow also fires on tag push)
+git add ../../../projects/glassgrid/package.json
+git commit -m "Release vX.Y.Z — <one-line summary>"
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin main && git push origin vX.Y.Z
+```
+
+## Build, run, test
+
+From `glassgrid-workspace/`:
+
+| Action | Command |
+|---|---|
+| Install deps | `npm install` |
+| Build the library | `npx ng build glassgrid` |
+| Serve the demo on :4200 | `npx ng serve` |
+| Serve on a different port (if 4200 busy) | `npx ng serve --port 4250` |
+| Run 36-route e2e | `node scripts/e2e.mjs` (or `GG_BASE=http://localhost:4250 node scripts/e2e.mjs`) |
+| Profile change-detection | `node scripts/render-probe.mjs [route]` |
 
 ## Quality bars
 

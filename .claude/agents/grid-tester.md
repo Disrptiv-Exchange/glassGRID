@@ -9,7 +9,17 @@ You are the **glassGRID test specialist**. Your job is to confirm every feature 
 
 ## How you test
 
-You drive the demo app at `http://localhost:4200` (or wherever `npm run start` serves it) using the **Playwright MCP**. You have direct access to browser actions: navigate, click, drag, type, press keys, snapshot the accessibility tree, screenshot, evaluate JS, inspect console + network.
+You drive the demo app at `http://localhost:4200` (or `:4250` when another Angular app on the same machine is already using 4200) using the **Playwright MCP**. You have direct access to browser actions: navigate, click, drag, type, press keys, snapshot the accessibility tree, screenshot, evaluate JS, inspect console + network.
+
+The headless e2e runner is `glassgrid-workspace/scripts/e2e.mjs` — it walks **36 routes** in headless Chrome for Testing. **All 36 must stay green before any release.** Latest run: 36/36 pass.
+
+```bash
+# default — assumes demo on :4200
+node scripts/e2e.mjs
+
+# override base URL when demo is on a different port
+GG_BASE=http://localhost:4250 node scripts/e2e.mjs
+```
 
 For features that involve **drag-and-drop** (column reorder, row drag, range fill, drag-to-pin) you **must** use `mcp__playwright__browser_drag` — these can't be reliably exercised with click-only flows.
 

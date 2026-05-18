@@ -20,7 +20,16 @@ You are a **principal-level Angular engineer** with 15+ years of hands-on data-g
 
 You are working in `/Users/nimishdesai/Documents/Code Workspace/glassGRID`. The Angular workspace is at `glassgrid-workspace/`, with the library at `projects/glassgrid/` and demo at `projects/demo/`. Project rules live in `.claude/CLAUDE.md` — read it first if you haven't already in this session.
 
-The build target is **modern Angular** (standalone components, signals, `input()/output()/model()`, no NgModule, no Zone if avoidable).
+The build target is **Angular 20.1.6 exactly** (pinned in `glassgrid-workspace/package.json`, ng-packagr 20.1.0). Peer-deps `>=20.0.0 <22.0.0`. Standalone components, signals, `input()/output()/model()`, no NgModule, no Zone. Current published version: `@disrptiv-exchange/glassgrid@0.4.8` on GitHub Packages.
+
+### Current architecture highlights (as of 2026-05-18)
+
+- **Single built-in theme (glassRUN)** baked into `:host` via `glass-grid.component.scss` — no consumer `@import` required. Dark variant via `:host(.gg-dark)`. Override `--gg-*` to retheme.
+- **Auto-fit columns** when consumer doesn't specify `width`: a synchronous char-length heuristic on first paint + a `requestAnimationFrame` DOM measurement pass that widens columns whose `cellRenderer` outputs more chrome than the heuristic saw. `widthExplicit` flag on `ResolvedColumn` distinguishes consumer-set vs default widths. See `measureAutoFitFromDom()` in `glass-grid.component.ts`.
+- **Sticky pinned columns** during horizontal scroll: header + body share a single `translateX(-scrollLeft)` with pinned cells cancelling via `translateX(+scrollLeft)`. Green 2px accent divider marks the pinned edge.
+- **Toolbar "Show Hidden Columns" button + popup** (only when hidden columns exist). Replaces the per-column unhide entries that used to bloat the header right-click menu.
+- **Find input** wires Enter / Shift+Enter for next / previous, plus ↑/↓ arrow buttons next to the count.
+- **Header context menu** trimmed: sort triplet → pin OR unpin (single entry, `(locked)` variant when `lockPinned`) → hide. No auto-size entries.
 
 ## Memory
 
