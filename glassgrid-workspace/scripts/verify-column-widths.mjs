@@ -93,6 +93,39 @@ assert(
   `viewport=${fill.vpWidth}px, columns=${fill.total}px, gap=${gap}px`,
 );
 
+// --- Scenarios 5-7: autoSizeStrategy='fitCellContents' on /fit-cell-contents ---
+await page.goto(`${BASE}/fit-cell-contents`, { waitUntil: 'networkidle', timeout: 20_000 });
+await page.waitForSelector('glass-grid .gg-header-cell', { timeout: 10_000 });
+await page.waitForTimeout(500);
+
+const fcHeaders = await probeHeaders();
+const byText = Object.fromEntries(fcHeaders.map((h) => [h.text, h]));
+
+// S5: a column with short cell data ("500"/"5,000" etc.) under a long header
+// ("Ordered Qty") must be narrow — i.e. the header DOES truncate.
+const orderedQty = byText['Ordered Qty'];
+assert(
+  "S5: fitCellContents — 'Ordered Qty' column sizes to cell data, header truncates",
+  !!orderedQty && orderedQty.truncated,
+  orderedQty ? `width=${orderedQty.width}, truncated=${orderedQty.truncated}` : 'header not found',
+);
+
+// S6: another short-data column — "Branch Plant Code" has cells "PKG01" etc., header is long
+const branch = byText['Branch Plant Code'];
+assert(
+  "S6: fitCellContents — 'Branch Plant Code' (short cells) sizes narrow, header truncates",
+  !!branch && branch.truncated,
+  branch ? `width=${branch.width}, truncated=${branch.truncated}` : 'header not found',
+);
+
+// S7: minWidth (60px set in defaultColDef) is still respected — no column is smaller than that
+const tooNarrow = fcHeaders.find((h) => h.width < 60);
+assert(
+  'S7: fitCellContents — minWidth is still respected (no column < 60px)',
+  !tooNarrow,
+  tooNarrow ? `column "${tooNarrow.text}" is ${tooNarrow.width}px (< 60)` : `min width across all = ${Math.min(...fcHeaders.map((h) => h.width))}px`,
+);
+
 if (errors.length) {
   console.log(`\nCONSOLE ERRORS: ${errors.length}`);
   errors.slice(0, 3).forEach((e) => console.log(`  - ${e}`));

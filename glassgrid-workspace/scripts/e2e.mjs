@@ -35,6 +35,8 @@ const routes = [
   'ag-binding',
   // batch 6: floating filter as Angular component
   'floating-filter-component',
+  // batch 7: fitCellContents auto-size strategy
+  'fit-cell-contents',
 ];
 
 const filter = process.argv[2];

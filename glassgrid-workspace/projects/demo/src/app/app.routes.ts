@@ -38,6 +38,7 @@ export const routes: Routes = [
   { path: 'cell-components', loadComponent: () => import('./features/cell-components.feature').then((m) => m.CellComponentsFeature) },
   { path: 'ag-binding', loadComponent: () => import('./features/ag-binding.feature').then((m) => m.AgBindingFeature) },
   { path: 'floating-filter-component', loadComponent: () => import('./features/floating-filter-component.feature').then((m) => m.FloatingFilterComponentFeature) },
+  { path: 'fit-cell-contents', loadComponent: () => import('./features/fit-cell-contents.feature').then((m) => m.FitCellContentsFeature) },
   { path: '**', redirectTo: '' },
 ];
 // touched

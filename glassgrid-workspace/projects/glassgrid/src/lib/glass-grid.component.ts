@@ -169,10 +169,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   readonly enableClipboardPaste = input(true);
 
   /**
-   * 'fitGridWidth' (default): if total natural column width is less than the body viewport, distribute
-   *   the leftover horizontal space proportionally so columns fill the viewport.
-   * 'fitCellContents': call autoSizeAllColumns() once on grid ready.
-   * null: leave column widths exactly as declared.
+   * 'fitGridWidth' (default): size columns to max(header content, cell content),
+   *   then scale up uniformly if total < viewport so columns fill the body.
+   * 'fitCellContents': size columns to cell content only; the header label is
+   *   ignored and will ellipsis-truncate if it can't fit. Use this when narrow
+   *   data should produce narrow columns (e.g. numeric / status / code columns
+   *   under long header labels like 'Ordered Quantity').
+   * null: skip auto-fit entirely; columns use declared width / minWidth.
    */
   readonly autoSizeStrategy = input<'fitGridWidth' | 'fitCellContents' | null>('fitGridWidth');
 
@@ -1051,10 +1054,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         changed = true;
       }
     };
+    const strategy = this.autoSizeStrategy();
     for (const c of autoFitCandidates) {
       const h = headerWidth.get(c.colId) ?? 0;
       const b = cellWidth.get(c.colId) ?? 0;
-      const measured = Math.max(h, b);
+      // 'fitCellContents': cell width only — header label is allowed to ellipsis-truncate.
+      // 'fitGridWidth' (default) / null: legacy max(header, cell) tiebreak.
+      const measured = strategy === 'fitCellContents' ? b : Math.max(h, b);
       if (measured > 0) widen(c, measured);
       this.autoFitMeasured.add(c.colId);
     }
@@ -2624,7 +2630,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   private computeAutoWidth(col: ResolvedColumn<TRow>): number {
     const padding = 32;
-    let max = (col.headerName?.length ?? 0) * 8 + padding;
+    const strategy = this.autoSizeStrategy();
+    // When 'fitCellContents', ignore the header label entirely and seed from
+    // padding only. Cell content widths are added below.
+    let max = strategy === 'fitCellContents'
+      ? padding
+      : (col.headerName?.length ?? 0) * 8 + padding;
     // Sample the first 200 visible rows — proportional-font heuristic, ~7px/char.
     for (const n of this.sortedFilteredNodes().slice(0, 200)) {
       const s = this.cellText(col, n);
