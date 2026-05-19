@@ -531,6 +531,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   readonly filteredNodes = computed<RowNode<TRow>[]>(() => {
     const all = this.orderedNodes();
+    const rm = this.rowModelType();
+    if (rm === 'infinite' || rm === 'serverSide' || rm === 'viewport') {
+      // Server already filtered; client must not re-filter (would hide
+      // rows from unfetched blocks).
+      return all;
+    }
     const q = this.internalQuickFilter() || this.quickFilterText();
     const visibleColDefs = this.visibleColumns().map((c) => c.colDef);
     const quickFiltered = applyQuickFilter(all, q, visibleColDefs);
@@ -538,6 +544,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   });
 
   readonly sortedFilteredNodes = computed<RowNode<TRow>[]>(() => {
+    const rm = this.rowModelType();
+    if (rm === 'infinite' || rm === 'serverSide' || rm === 'viewport') {
+      return this.filteredNodes();
+    }
     return sortRows(this.filteredNodes(), this.sortModel(), this.colDefById());
   });
 
@@ -894,11 +904,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
     // datasource attachment effect: when consumer calls gridApi.setGridOption('datasource', ds),
     // fetch the first block immediately (ag-grid behaviour).
+    // Subscribe to filterModel / sortModel so changes re-trigger this effect — the server
+    // is authoritative for infinite / serverSide / viewport row models, matching ag-grid
+    // semantics. Cache + localRowData are cleared before fetching so the consumer's
+    // getRows callback runs against a clean state with the new model.
     effect(() => {
       const ds = this.attachedDatasource();
+      this.filterModel();
+      this.sortModel();
       if (!ds) return;
       untracked(() => {
         this.infiniteFetched.clear();
+        this.localRowData.set([]);
         this.fetchInfiniteBlock(0);
       });
     });
