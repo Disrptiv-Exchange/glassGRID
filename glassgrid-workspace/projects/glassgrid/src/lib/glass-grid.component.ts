@@ -1138,6 +1138,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   ngOnDestroy() {
     this.viewportResizeObserver?.disconnect();
     this.viewportResizeObserver = null;
+    for (const p of this.floatingFilterPending.values()) clearTimeout(p.timer);
+    this.floatingFilterPending.clear();
   }
   private measureViewport() {
     const vp = this.viewportRef?.nativeElement;
@@ -1353,7 +1355,47 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const item = Array.isArray(v) ? v[0]! : v;
     return item?.filter == null ? '' : String(item.filter);
   }
+  /**
+   * Pending debounce timers for floating-filter inputs, keyed by colId. Each
+   * entry remembers the latest typed value so blur / Enter can flush the
+   * pending apply with the correct value.
+   */
+  private readonly floatingFilterPending = new Map<string, { timer: ReturnType<typeof setTimeout>; value: string }>();
+
   onFloatingFilterInput(col: ResolvedColumn<TRow>, value: string) {
+    // Cancel any pending debounce for this column — restart the window.
+    const existing = this.floatingFilterPending.get(col.colId);
+    if (existing) clearTimeout(existing.timer);
+
+    const isClear = value.trim() === '';
+    const ft = resolveFilterType(col.colDef.filter);
+    const colDebounce = col.colDef.filterParams?.debounceMs;
+    // ag-grid parity: 500ms text/number, 0ms date. Per-column override wins.
+    // Clearing the input always applies immediately (explicit user action).
+    const debounceMs = isClear ? 0 : (
+      typeof colDebounce === 'number' ? colDebounce :
+      ft === 'date' ? 0 : 500
+    );
+
+    if (debounceMs <= 0) {
+      this.floatingFilterPending.delete(col.colId);
+      this.applyFloatingFilter(col, value);
+    } else {
+      const timer = setTimeout(() => this.applyFloatingFilter(col, value), debounceMs);
+      this.floatingFilterPending.set(col.colId, { timer, value });
+    }
+  }
+
+  /** Flush any pending floating-filter debounce for this column immediately. */
+  flushFloatingFilter(col: ResolvedColumn<TRow>) {
+    const pending = this.floatingFilterPending.get(col.colId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.applyFloatingFilter(col, pending.value);
+  }
+
+  private applyFloatingFilter(col: ResolvedColumn<TRow>, value: string) {
+    this.floatingFilterPending.delete(col.colId);
     const m = { ...this.filterModel() };
     const ft = resolveFilterType(col.colDef.filter);
     const t = ft === 'number' || ft === 'date' ? 'equals' : 'contains';

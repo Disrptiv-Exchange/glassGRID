@@ -223,6 +223,13 @@ export interface FilterParams<TRow = unknown, TValue = unknown> {
   values?: TValue[] | ((cb: (values: TValue[]) => void) => void);
   defaultOption?: FilterOp;
   caseSensitive?: boolean;
+  /**
+   * Floating-filter input debounce in ms. Defaults to 500 for text / number
+   * filters and 0 for date filters (matching ag-grid). The empty / clear case
+   * always applies immediately. Blur and Enter on the input flush any pending
+   * debounce.
+   */
+  debounceMs?: number;
   /** ag-grid compatibility — surfaced for type-checking; behaviour is best-effort. */
   alwaysShowBothConditions?: boolean;
   suppressAndOrCondition?: boolean;

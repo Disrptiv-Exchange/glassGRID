@@ -212,6 +212,8 @@
                   class="gg-floating-filter-input"
                   [value]="floatingFilterValue(col)"
                   (input)="onFloatingFilterInput(col, $any($event.target).value)"
+                  (blur)="flushFloatingFilter(col)"
+                  (keydown.enter)="flushFloatingFilter(col)"
                   [placeholder]="filterTypeFor(col) === 'number' ? '#' : filterTypeFor(col) === 'date' ? 'yyyy-mm-dd' : ''"
                 />
               }
@@ -541,6 +543,8 @@
                 <input type="text"
                   [value]="floatingFilterValue(c)"
                   (input)="onFloatingFilterInput(c, $any($event.target).value)"
+                  (blur)="flushFloatingFilter(c)"
+                  (keydown.enter)="flushFloatingFilter(c)"
                   placeholder="filter…"
                 />
               </div>
