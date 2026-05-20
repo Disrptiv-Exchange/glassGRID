@@ -150,6 +150,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    */
   readonly columnTypes = input<import('./types').ColumnTypeMap<TRow>>({});
   readonly getRowId = input<((row: TRow) => string) | null>(null);
+  /**
+   * Optional class-name callback per row (ag-grid `getRowClass` parity).
+   * Receives `{ data, node, rowIndex }` and returns a class string, an array of
+   * class strings, or null / undefined to skip. Also resolved from
+   * `[gridOptions].getRowClass` for ag-grid drop-in style.
+   */
+  readonly getRowClass = input<((params: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined) | null>(null);
 
   // server / infinite row models
   readonly serverSideDatasource = input<ServerSideDatasource<TRow> | null>(null);
@@ -2055,6 +2062,29 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (agg == null) return '';
     return formatCellValue(col.colDef, { id: group.id, data: {} as TRow, rowIndex: -1, selected: false }, agg);
   }
+  /**
+   * Resolve row-level CSS classes from the `getRowClass` callback. Honors all
+   * three pass-through forms: the dedicated [getRowClass] input, the
+   * [gridOptions].getRowClass property, and the runtime override (via
+   * `gridApi.setGridOption('getRowClass', fn)`). The dedicated input wins.
+   */
+  rowClasses(node: RowNode<TRow>, rowIndex: number): Record<string, boolean> {
+    const fn =
+      this.getRowClass() ??
+      (this.gridOptions() as { getRowClass?: (p: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined } | null)?.getRowClass ??
+      (this.gridOptionsOverride() as { getRowClass?: (p: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined }).getRowClass;
+    if (!fn) return {};
+    const result = fn({ data: node.data, node, rowIndex });
+    if (!result) return {};
+    const out: Record<string, boolean> = {};
+    if (typeof result === 'string') {
+      for (const c of result.split(/\s+/)) if (c) out[c] = true;
+    } else if (Array.isArray(result)) {
+      for (const c of result) if (c) out[c] = true;
+    }
+    return out;
+  }
+
   cellClasses(col: ResolvedColumn<TRow>, node: RowNode<TRow>): Record<string, boolean> {
     const out: Record<string, boolean> = { 'gg-cell': true };
     out[`gg-col-pinned-${col.pinned ?? 'none'}`] = true;

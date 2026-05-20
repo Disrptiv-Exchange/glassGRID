@@ -270,6 +270,13 @@ export interface IGetRowsParams<TRow = unknown> {
   failCallback(): void;
 }
 
+/** Params passed to `getRowClass` for each rendered row (ag-grid parity). */
+export interface RowClassParams<TRow = unknown> {
+  data: TRow;
+  node: RowNode<TRow>;
+  rowIndex: number;
+}
+
 /** Loose `gridOptions` bag — a subset of ag-grid GridOptions for drop-in style. */
 export interface GridOptions<TRow = unknown> {
   headerHeight?: number;
@@ -292,6 +299,8 @@ export interface GridOptions<TRow = unknown> {
   columnDefs?: (ColumnDef<TRow> | ColumnGroupDef<TRow>)[];
   /** Initial datasource for `rowModelType: 'infinite'`. */
   datasource?: IDatasource<TRow>;
+  /** Returns class name(s) to apply to each row. ag-grid parity. */
+  getRowClass?: (params: RowClassParams<TRow>) => string | string[] | null | undefined;
 }
 
 // ---- async transactions ----
