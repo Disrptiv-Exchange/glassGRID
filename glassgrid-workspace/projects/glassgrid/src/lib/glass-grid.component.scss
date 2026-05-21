@@ -362,6 +362,29 @@
 }
 .gg-cell.gg-pinned-right { background: var(--gg-bg); }
 
+/* Visual row banding by field: when a row has a `.gg-row-band-X` class
+ * (set by [rowBandingByField]), pinned cells defer to the row's own
+ * background so pinned + non-pinned cells render with one unified color.
+ *
+ * Without this rule, the opaque pinned-cell backgrounds set above
+ * (var(--gg-bg) plus odd-row / hover / selected overrides) win against
+ * the row-level band class and the pinned area looks different from the
+ * non-pinned area. This rule has equal specificity to the
+ * `.gg-row.gg-row-odd .gg-cell.gg-pinned-*` /
+ * `.gg-row.gg-row-selected .gg-cell.gg-pinned-*` rules and appears later
+ * in the file, so it wins the tie. Hover (`.gg-row:hover .gg-cell.*`) has
+ * lower specificity and also loses to this rule.
+ *
+ * Result: banded rows render uniformly across pinned and non-pinned
+ * cells, in normal, hovered, and selected states alike.
+ */
+.gg-row.gg-row-band-0 .gg-cell.gg-pinned-left,
+.gg-row.gg-row-band-1 .gg-cell.gg-pinned-left,
+.gg-row.gg-row-band-0 .gg-cell.gg-pinned-right,
+.gg-row.gg-row-band-1 .gg-cell.gg-pinned-right {
+  background: transparent;
+}
+
 /* Green divider between pinned and unpinned column groups */
 .gg-header-cell.gg-pinned-edge-left,
 .gg-cell.gg-pinned-edge-left {
