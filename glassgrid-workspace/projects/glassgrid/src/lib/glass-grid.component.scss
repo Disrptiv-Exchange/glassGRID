@@ -342,47 +342,30 @@
 }
 /* ---- pinned columns: sticky positioning so they stay in place during horizontal scroll ---- */
 .gg-header-cell.gg-pinned-left,
-.gg-cell.gg-pinned-left {
+.gg-header-cell.gg-pinned-right {
   position: sticky;
   z-index: 3;
-  /* opaque background so non-pinned columns scroll under, not through */
   background: var(--gg-header-bg);
 }
-.gg-cell.gg-pinned-left {
-  background: var(--gg-bg);
-}
-.gg-row.gg-row-odd .gg-cell.gg-pinned-left { background: color-mix(in srgb, var(--gg-bg) 96%, currentColor); }
-.gg-row.gg-row-selected .gg-cell.gg-pinned-left { background: var(--gg-row-selected-bg); }
-.gg-row:hover .gg-cell.gg-pinned-left { background: color-mix(in srgb, var(--gg-bg) 92%, currentColor); }
-.gg-header-cell.gg-pinned-right,
+
+/* Pinned body cells inherit the row's background-color. Two reasons:
+ *  1. They must be OPAQUE so non-pinned columns scroll *under* them, not
+ *     visible *through* them (the row text-bleed bug fixed in v0.4.24).
+ *  2. They must follow whatever colour the row is currently showing —
+ *     default, odd-row zebra, hover, selected, getRowStyle inline tint,
+ *     or [rowBandingByField] banded — so pinned and non-pinned halves of
+ *     the same row render with one unified colour (the pinned vs
+ *     non-pinned mismatch fixed in v0.4.23).
+ *
+ * `background-color: inherit` solves both at once: pinned cells pick up
+ * whatever the row resolved its background-color to (class rule, inline
+ * style from [getRowStyle], anything), without per-state overrides
+ * needing to be replicated on the cell. */
+.gg-cell.gg-pinned-left,
 .gg-cell.gg-pinned-right {
   position: sticky;
   z-index: 3;
-  background: var(--gg-header-bg);
-}
-.gg-cell.gg-pinned-right { background: var(--gg-bg); }
-
-/* Visual row banding by field: when a row has a `.gg-row-band-X` class
- * (set by [rowBandingByField]), pinned cells defer to the row's own
- * background so pinned + non-pinned cells render with one unified color.
- *
- * Without this rule, the opaque pinned-cell backgrounds set above
- * (var(--gg-bg) plus odd-row / hover / selected overrides) win against
- * the row-level band class and the pinned area looks different from the
- * non-pinned area. This rule has equal specificity to the
- * `.gg-row.gg-row-odd .gg-cell.gg-pinned-*` /
- * `.gg-row.gg-row-selected .gg-cell.gg-pinned-*` rules and appears later
- * in the file, so it wins the tie. Hover (`.gg-row:hover .gg-cell.*`) has
- * lower specificity and also loses to this rule.
- *
- * Result: banded rows render uniformly across pinned and non-pinned
- * cells, in normal, hovered, and selected states alike.
- */
-.gg-row.gg-row-band-0 .gg-cell.gg-pinned-left,
-.gg-row.gg-row-band-1 .gg-cell.gg-pinned-left,
-.gg-row.gg-row-band-0 .gg-cell.gg-pinned-right,
-.gg-row.gg-row-band-1 .gg-cell.gg-pinned-right {
-  background: transparent;
+  background-color: inherit;
 }
 
 /* Green divider between pinned and unpinned column groups */
