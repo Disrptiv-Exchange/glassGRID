@@ -348,6 +348,7 @@
                   (mouseleave)="onCellMouseLeave(entry.row.node, col, $event)"
                   (mousedown)="onCellMouseDown(entry.index, ci, $event)"
                 >
+                  @if (!shouldCollapseCell(col, entry.row.node)) {
                   @if (col.colDef.checkboxSelection) {
                     <input
                       type="checkbox"
@@ -427,6 +428,7 @@
                       }
                     }
                   }
+                  } <!-- end shouldCollapseCell gate -->
                 </div>
               }
             </div>

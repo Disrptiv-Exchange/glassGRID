@@ -284,6 +284,31 @@ export interface RowStyleParams<TRow = unknown> {
   rowIndex: number;
 }
 
+/**
+ * Visual row banding by a field value — alternates a CSS class per group of
+ * consecutive rows sharing the same `field` value. Distinct from true row
+ * grouping (no expand/collapse). The library emits class hooks
+ * `.gg-row-band-0` / `.gg-row-band-1` on each row; the consumer page styles
+ * them. Rows whose field value is empty/null/undefined each form their own
+ * single-row group.
+ */
+export interface RowBandingByField {
+  /** Column field whose value defines the group key. */
+  field: string;
+  /**
+   * Optional list of column fields (or colIds) whose cells render content
+   * only on the FIRST row of each group. Subsequent rows in the same group
+   * leave those cells empty, visually merging the group.
+   */
+  collapseColumns?: string[];
+  /**
+   * When true (default), toggling the checkbox on any row selects (or
+   * deselects) all sibling rows sharing the same field value. When false,
+   * each row selects independently.
+   */
+  selectGroup?: boolean;
+}
+
 /** Loose `gridOptions` bag — a subset of ag-grid GridOptions for drop-in style. */
 export interface GridOptions<TRow = unknown> {
   headerHeight?: number;

@@ -164,6 +164,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    * `gridApi.setGridOption('getRowStyle', fn)`. The dedicated input wins.
    */
   readonly getRowStyle = input<((params: import('./types').RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined) | null>(null);
+  /**
+   * Opt-in visual row banding by a field value. When set, the library:
+   *   - alternates CSS classes `.gg-row-band-0` / `.gg-row-band-1` per group
+   *     of consecutive rows sharing the same `field` value;
+   *   - optionally collapses cells in `collapseColumns` to only render
+   *     content on the FIRST row of each group;
+   *   - optionally extends checkbox toggles to all sibling rows in the
+   *     same group (default behaviour; opt-out via `selectGroup: false`).
+   * Distinct from true row grouping — no expand/collapse, no auto-group column.
+   */
+  readonly rowBandingByField = input<import('./types').RowBandingByField | null>(null);
 
   // server / infinite row models
   readonly serverSideDatasource = input<ServerSideDatasource<TRow> | null>(null);
@@ -1443,8 +1454,28 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   toggleRowCheckbox(node: RowNode<TRow>, ev: Event) {
     ev.stopPropagation();
     const ids = new Set(this.selectedIds());
-    if (ids.has(node.id)) ids.delete(node.id);
-    else ids.add(node.id);
+    const willSelect = !ids.has(node.id);
+    const cfg = this.rowBandingByField();
+    const useGroupSelect = !!cfg && (cfg.selectGroup ?? true);
+    if (useGroupSelect) {
+      const fieldValue = (node.data as Record<string, unknown> | null)?.[cfg!.field];
+      // Empty group key → fall back to single-row toggle.
+      if (fieldValue != null && fieldValue !== '') {
+        for (const sibling of this.sortedFilteredNodes()) {
+          const sibVal = (sibling.data as Record<string, unknown> | null)?.[cfg!.field];
+          if (sibVal === fieldValue) {
+            if (willSelect) ids.add(sibling.id);
+            else ids.delete(sibling.id);
+          }
+        }
+      } else {
+        if (willSelect) ids.add(node.id);
+        else ids.delete(node.id);
+      }
+    } else {
+      if (willSelect) ids.add(node.id);
+      else ids.delete(node.id);
+    }
     if (this.rowSelection() === 'single' && ids.size > 1) { ids.clear(); ids.add(node.id); }
     this.selectedIds.set(ids);
   }
@@ -2076,20 +2107,73 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    * `gridApi.setGridOption('getRowClass', fn)`). The dedicated input wins.
    */
   rowClasses(node: RowNode<TRow>, rowIndex: number): Record<string, boolean> {
+    const out: Record<string, boolean> = {};
     const fn =
       this.getRowClass() ??
       (this.gridOptions() as { getRowClass?: (p: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined } | null)?.getRowClass ??
       (this.gridOptionsOverride() as { getRowClass?: (p: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined }).getRowClass;
-    if (!fn) return {};
-    const result = fn({ data: node.data, node, rowIndex });
-    if (!result) return {};
-    const out: Record<string, boolean> = {};
-    if (typeof result === 'string') {
-      for (const c of result.split(/\s+/)) if (c) out[c] = true;
-    } else if (Array.isArray(result)) {
-      for (const c of result) if (c) out[c] = true;
+    if (fn) {
+      const result = fn({ data: node.data, node, rowIndex });
+      if (result) {
+        if (typeof result === 'string') {
+          for (const c of result.split(/\s+/)) if (c) out[c] = true;
+        } else if (Array.isArray(result)) {
+          for (const c of result) if (c) out[c] = true;
+        }
+      }
     }
+    // Apply visual-row-banding class hook so consumers can style alternating
+    // bands via `.gg-row-band-0` / `.gg-row-band-1` in their own SCSS.
+    const band = this.bandInfoByNodeId().get(node.id);
+    if (band) out[`gg-row-band-${band.bandIndex}`] = true;
     return out;
+  }
+
+  /**
+   * Memoised per-row banding info derived from `rowBandingByField()`. Walks
+   * sortedFilteredNodes() once and assigns each node a band index (0|1) and
+   * a `isFirstInGroup` flag based on runs of consecutive rows sharing the
+   * configured field value. Empty/null/undefined values each form their
+   * own single-row group (so they always flip the band and always count as
+   * first-in-group).
+   */
+  protected readonly bandInfoByNodeId = computed<ReadonlyMap<string, { bandIndex: 0 | 1; isFirstInGroup: boolean }>>(() => {
+    const cfg = this.rowBandingByField();
+    const map = new Map<string, { bandIndex: 0 | 1; isFirstInGroup: boolean }>();
+    if (!cfg?.field) return map;
+    const field = cfg.field;
+    const rows = this.sortedFilteredNodes();
+    let currentBand: 0 | 1 = 1; // first row will flip → starts at 0
+    let prevKey: unknown = undefined;
+    let prevWasEmpty = true;
+    for (const n of rows) {
+      const value = (n.data as Record<string, unknown> | null)?.[field];
+      const isEmpty = value == null || value === '';
+      let isFirstInGroup: boolean;
+      if (isEmpty || prevWasEmpty || value !== prevKey) {
+        currentBand = currentBand === 0 ? 1 : 0;
+        isFirstInGroup = true;
+      } else {
+        isFirstInGroup = false;
+      }
+      prevKey = isEmpty ? undefined : value;
+      prevWasEmpty = isEmpty;
+      map.set(n.id, { bandIndex: currentBand, isFirstInGroup });
+    }
+    return map;
+  });
+
+  /** True iff this cell is in a `collapseColumns` column AND its row is NOT
+   *  the first of its banding group. Used by the template to skip rendering
+   *  the cell's content (the cell still occupies the row to preserve layout). */
+  shouldCollapseCell(col: ResolvedColumn<TRow>, node: RowNode<TRow>): boolean {
+    const cfg = this.rowBandingByField();
+    if (!cfg?.collapseColumns?.length) return false;
+    const list = cfg.collapseColumns;
+    const colMatches = (col.field != null && list.includes(col.field)) || list.includes(col.colId);
+    if (!colMatches) return false;
+    const info = this.bandInfoByNodeId().get(node.id);
+    return info ? !info.isFirstInGroup : false;
   }
 
   /**
