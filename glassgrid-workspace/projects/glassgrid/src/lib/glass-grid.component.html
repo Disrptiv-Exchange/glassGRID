@@ -203,8 +203,16 @@
           >
             @if (col.colDef.floatingFilter && col.colDef.filter) {
               @if (floatingFilterComponentType(col); as cmp) {
+                <!-- Custom floating-filter component. The host directive
+                     dynamically creates the component, calls agInit /
+                     onParentModelChanged for ag-grid drop-in components,
+                     and translates parentFilterInstance writes back into
+                     the grid's filter-model signal. -->
                 <ng-container
-                  *ngComponentOutlet="cmp; inputs: floatingFilterComponentInputs(col)"
+                  [ggFloatingFilterHost]="cmp"
+                  [ggFilterParams]="floatingFilterAgGridParams(col)"
+                  [ggCurrentFilterItem]="currentFilterItemForColumn(col)"
+                  (ggFilterChanged)="onAgFloatingFilterChanged(col, $event.type, $event.value)"
                 />
               } @else {
                 <input

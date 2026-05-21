@@ -127,7 +127,22 @@ export interface ColumnDef<TRow = unknown, TValue = unknown> {
     | 'agMultiColumnFilter';
   filterParams?: FilterParams<TRow, TValue>;
   floatingFilter?: boolean;
+  /**
+   * Custom floating-filter component. Can be either:
+   *  - A component class — mounted directly via *ngComponentOutlet.
+   *  - A string id — looked up in the grid's `[components]` registry
+   *    (ag-grid drop-in pattern). If the resolved component implements
+   *    the ag-grid `AgFloatingFilterComponent` contract (`agInit` +
+   *    `onParentModelChanged` lifecycle), glass-grid invokes those hooks
+   *    via the FloatingFilterAgGridParams shape.
+   */
   floatingFilterComponent?: unknown;
+  /**
+   * Extra params merged into the floating-filter component's params object.
+   * Either a plain object or a function returning one. Common shapes:
+   *   `{ values: [...], label: '(All)' }` — for dropdown filters.
+   */
+  floatingFilterComponentParams?: Record<string, unknown> | ((params: { colDef: ColumnDef<TRow, TValue> }) => Record<string, unknown>);
 
   // editing — phase 2
   editable?: boolean | ((params: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow, TValue> }) => boolean);
@@ -335,6 +350,51 @@ export interface GridOptions<TRow = unknown> {
   getRowClass?: (params: RowClassParams<TRow>) => string | string[] | null | undefined;
   /** Returns inline-style map to apply to each row. ag-grid parity. */
   getRowStyle?: (params: RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined;
+  /**
+   * String-name → component class registry for `floatingFilterComponent`
+   * (and other future string-lookup slots). Mirrors ag-grid's `components`
+   * (formerly `frameworkComponents`) so columns can reference filters by
+   * string id: `floatingFilterComponent: 'statusFilterComponent'`.
+   */
+  components?: Record<string, unknown>;
+  /**
+   * Arbitrary context object handed to floating-filter / cell components
+   * via `params.context`. Mirrors ag-grid's `gridOptions.context`.
+   */
+  context?: unknown;
+}
+
+/**
+ * Params shape passed to floating-filter components that follow the ag-grid
+ * `AgFloatingFilterComponent` contract. Glass-grid builds this object and
+ * either calls `instance.agInit(params)` (if the method exists) or sets it
+ * via Angular's input binding.
+ *
+ * The two important hooks are:
+ *  - `parentFilterInstance(cb)`: invokes the callback with an instance
+ *    object exposing `onFloatingFilterChanged(type, value)`. Calling that
+ *    method writes a new filter value back to the grid.
+ *  - `onParentModelChanged(filterModelItem)`: implemented on the COMPONENT
+ *    (not in this params object); glass-grid calls it whenever the column's
+ *    filter model changes from elsewhere (popup filter, programmatic, etc.).
+ */
+export interface FloatingFilterAgGridParams<TRow = unknown> {
+  /** Current filter value (null when no filter). Convenience reader. */
+  value: unknown;
+  /** Minimal column accessor (ag-grid parity). */
+  column: { getColId(): string; getColDef(): ColumnDef<TRow>; };
+  /** Resolved colDef for the column. */
+  colDef: ColumnDef<TRow>;
+  /** Arbitrary context object from `[context]` / `gridOptions.context`. */
+  context: unknown;
+  /** Pass `(instance) => instance.onFloatingFilterChanged(type, value)` to write a new filter value. */
+  parentFilterInstance(cb: (instance: { onFloatingFilterChanged(type: string | null, value: unknown): void }) => void): void;
+  /** Convenience: drives `onFloatingFilterChanged` directly without the callback dance. */
+  onValueChange(value: unknown): void;
+  /** suppressFilterButton flag from ag-grid params; honoured for parity, no behaviour change. */
+  suppressFilterButton?: boolean;
+  /** Any extra props from `floatingFilterComponentParams` are spread onto this object. */
+  [key: string]: unknown;
 }
 
 // ---- async transactions ----

@@ -85,6 +85,7 @@ import { resolveLocale } from './internal/locale';
 import { buildHeaderTree, type ResolvedColumnGroup, type HeaderTree } from './internal/column-groups';
 import { pivotTransform } from './internal/pivot';
 import { toExcelXml, downloadExcel } from './internal/excel-export';
+import { FloatingFilterHostDirective } from './internal/floating-filter-host.directive';
 
 interface RenderColumn<TRow> extends ResolvedColumn<TRow> {
   computedWidth: number;
@@ -118,7 +119,7 @@ function escapeHtml(s: string): string {
 @Component({
   selector: 'glass-grid',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgComponentOutlet],
+  imports: [CommonModule, FormsModule, NgComponentOutlet, FloatingFilterHostDirective],
   templateUrl: './glass-grid.component.html',
   styleUrl: './glass-grid.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -212,6 +213,19 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   // ---- ag-grid drop-in inputs ----
   /** ag-grid-style `[gridOptions]` bag — applied as a one-shot config on grid ready. */
   readonly gridOptions = input<import('./types').GridOptions<TRow> | null>(null);
+  /**
+   * String-name → component class registry for `floatingFilterComponent`
+   * (and future string-lookup slots). Mirrors ag-grid's `[components]`
+   * (formerly `[frameworkComponents]`). Looked up before falling back to
+   * `gridOptions.components`.
+   */
+  readonly components = input<Record<string, unknown> | null>(null);
+  /**
+   * Arbitrary context object handed to floating-filter components via
+   * `params.context`. Mirrors ag-grid's `[context]`. Looked up before
+   * falling back to `gridOptions.context`.
+   */
+  readonly context = input<unknown>(null);
   /** Row model: 'clientSide' (default) | 'infinite' | 'serverSide' | 'viewport'. */
   readonly rowModelType = input<import('./types').RowModelType>('clientSide');
   readonly suppressScrollOnNewData = input(false);
@@ -1355,13 +1369,29 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     this.openFilterColId.set(null);
     this.currentPage.set(0);
   }
-  /** Optional Angular component declared in `colDef.floatingFilterComponent`. */
+  /**
+   * Resolve the floating-filter component for a column. Two accepted forms:
+   *   1. A class reference (`floatingFilterComponent: MyComponent`).
+   *   2. A string id (`floatingFilterComponent: 'statusFilterComponent'`)
+   *      looked up in the `[components]` registry (or `gridOptions.components`).
+   *      Mirrors ag-grid's drop-in pattern.
+   */
   floatingFilterComponentType(col: ResolvedColumn<TRow>): Type<unknown> | null {
     const c = col.colDef.floatingFilterComponent;
-    return (c && typeof c === 'function') ? (c as Type<unknown>) : null;
+    if (!c) return null;
+    if (typeof c === 'function') return c as Type<unknown>;
+    if (typeof c === 'string') {
+      const registry =
+        this.components() ??
+        (this.gridOptions() as { components?: Record<string, unknown> } | null)?.components ??
+        null;
+      const found = registry?.[c];
+      return (found && typeof found === 'function') ? (found as Type<unknown>) : null;
+    }
+    return null;
   }
 
-  /** Inputs object passed to the floating-filter ngComponentOutlet. */
+  /** Inputs object passed to the floating-filter ngComponentOutlet (legacy path). */
   floatingFilterComponentInputs(col: ResolvedColumn<TRow>): Record<string, unknown> {
     const params = {
       value: this.floatingFilterValue(col),
@@ -1372,6 +1402,76 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       },
     };
     return { params };
+  }
+
+  /**
+   * Adapter params for ag-grid drop-in floating-filter components.
+   * Merges:
+   *   - the column's `floatingFilterComponentParams` (object or function),
+   *   - core ag-grid shape (`value`, `column`, `colDef`, `context`,
+   *     `onValueChange`). `parentFilterInstance` is added by the
+   *     FloatingFilterHostDirective at mount time.
+   */
+  floatingFilterAgGridParams(col: ResolvedColumn<TRow>): Record<string, unknown> {
+    const ffParams = col.colDef.floatingFilterComponentParams;
+    const extras: Record<string, unknown> =
+      typeof ffParams === 'function'
+        ? (ffParams as (p: { colDef: import('./types').ColumnDef<TRow> }) => Record<string, unknown>)({ colDef: col.colDef })
+        : (ffParams ?? {});
+    const ctx =
+      this.context() ??
+      (this.gridOptions() as { context?: unknown } | null)?.context ??
+      null;
+    return {
+      value: this.currentFilterItemForColumn(col),
+      column: {
+        getColId: () => col.colId,
+        getColDef: () => col.colDef,
+      },
+      colDef: col.colDef,
+      context: ctx,
+      onValueChange: (v: string | number | null) => {
+        const s = v == null ? '' : String(v);
+        this.onFloatingFilterInput(col, s);
+      },
+      ...extras,
+    };
+  }
+
+  /**
+   * Current filter-model item for a column (null when no filter). Passed
+   * into the host directive so `onParentModelChanged` fires whenever the
+   * model changes externally (popup filter, setFilterModel, etc.).
+   */
+  currentFilterItemForColumn(col: ResolvedColumn<TRow>): unknown {
+    const m = this.filterModel()[col.colId];
+    if (!m) return null;
+    return Array.isArray(m) ? m[0] : m;
+  }
+
+  /**
+   * Bridge between ag-grid's `parentFilterInstance(cb => cb.onFloatingFilterChanged(type, value))`
+   * write path and glass-grid's filter-model signal. Called by the host
+   * directive when a hosted component fires its `filterChanged` output.
+   *
+   * Date columns get the ag-grid date-filter shape (`{filterType, type, dateFrom}`).
+   * Everything else gets the standard `{type, filter}` shape.
+   */
+  onAgFloatingFilterChanged(col: ResolvedColumn<TRow>, type: string | null, value: unknown): void {
+    const m = { ...this.filterModel() };
+    if (type === null || value == null || value === '') {
+      delete m[col.colId];
+    } else {
+      const ft = resolveFilterType(col.colDef.filter);
+      if (ft === 'date') {
+        m[col.colId] = { filterType: 'date', type: type as import('./types').FilterOp, dateFrom: String(value) } as never;
+      } else {
+        const coerced = ft === 'number' ? Number(value) : (value as string | number);
+        m[col.colId] = { type: type as import('./types').FilterOp, filter: coerced };
+      }
+    }
+    this.filterModel.set(m);
+    this.currentPage.set(0);
   }
 
   floatingFilterValue(col: ResolvedColumn<TRow>): string {
