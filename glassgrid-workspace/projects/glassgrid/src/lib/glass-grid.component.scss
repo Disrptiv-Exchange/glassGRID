@@ -409,6 +409,27 @@
   display: flex; align-items: center; padding: 0 6px;
   border-right: 1px solid var(--gg-border);
 }
+
+/* Pinned floating-filter cells need the same opaque-tile treatment as
+ * pinned body cells, otherwise non-pinned filter content slides under them
+ * during horizontal scroll and bleeds through (visible as overlapping
+ * filter widgets / text). Use `var(--gg-header-bg)` to match the floating-
+ * filter row's own background and stay visually consistent with header
+ * pinned cells (which already do this at lines 344-349). */
+.gg-floating-filter-cell.gg-pinned-left,
+.gg-floating-filter-cell.gg-pinned-right {
+  z-index: 3;
+  background-color: var(--gg-header-bg);
+}
+.gg-floating-filter-cell.gg-pinned-edge-left {
+  border-right: 2px solid var(--gg-accent) !important;
+  z-index: 4;
+}
+.gg-floating-filter-cell.gg-pinned-edge-right {
+  border-left: 2px solid var(--gg-accent) !important;
+  z-index: 4;
+}
+
 .gg-floating-filter-input {
   width: 100%; padding: 3px 6px; font: inherit;
   border: 1px solid var(--gg-border); border-radius: 4px;
