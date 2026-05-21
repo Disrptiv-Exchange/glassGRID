@@ -2132,10 +2132,20 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   /**
    * Memoised per-row banding info derived from `rowBandingByField()`. Walks
    * sortedFilteredNodes() once and assigns each node a band index (0|1) and
-   * a `isFirstInGroup` flag based on runs of consecutive rows sharing the
-   * configured field value. Empty/null/undefined values each form their
-   * own single-row group (so they always flip the band and always count as
-   * first-in-group).
+   * a `isFirstInGroup` flag.
+   *
+   * Algorithm — TWO independent counters:
+   *   • Plan-group counter: increments only when a new (different, non-empty)
+   *     field value appears. Alternates 0→1→0→1… starting at 0 (band-0).
+   *     Consecutive rows sharing the same field value share the band of the
+   *     first row in the run (so a multi-row group reads as one colour band).
+   *   • No-plan counter: increments only on empty/null/undefined-valued rows.
+   *     Alternates 0→1→0→1… starting at 1 (band-1) — the user's described
+   *     "in sequence show gray and then white".
+   *
+   * The two counters are independent so crossing a no-plan row does NOT
+   * advance the plan-group counter (and vice-versa). Result: visually
+   * separate alternation streams that don't drag each other.
    */
   protected readonly bandInfoByNodeId = computed<ReadonlyMap<string, { bandIndex: 0 | 1; isFirstInGroup: boolean }>>(() => {
     const cfg = this.rowBandingByField();
@@ -2143,22 +2153,34 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (!cfg?.field) return map;
     const field = cfg.field;
     const rows = this.sortedFilteredNodes();
-    let currentBand: 0 | 1 = 1; // first row will flip → starts at 0
-    let prevKey: unknown = undefined;
-    let prevWasEmpty = true;
+    let nextPlanBand: 0 | 1 = 0;   // next plan group lands here
+    let nextNoPlanBand: 0 | 1 = 1; // next no-plan row lands here
+    let prevPlanKey: unknown = undefined;
+    let lastPlanGroupBand: 0 | 1 = 0; // band assigned to most recent plan group, for multi-row reuse
     for (const n of rows) {
       const value = (n.data as Record<string, unknown> | null)?.[field];
       const isEmpty = value == null || value === '';
+      let band: 0 | 1;
       let isFirstInGroup: boolean;
-      if (isEmpty || prevWasEmpty || value !== prevKey) {
-        currentBand = currentBand === 0 ? 1 : 0;
+      if (isEmpty) {
+        band = nextNoPlanBand;
+        isFirstInGroup = true; // each empty-valued row is its own single-row group
+        nextNoPlanBand = nextNoPlanBand === 0 ? 1 : 0;
+        // No-plan rows do NOT touch prevPlanKey — a same-PlanNumber group
+        // resuming after a no-plan row is still detected as a new plan group
+        // only when its value differs from the prior non-empty plan value.
+      } else if (value !== prevPlanKey) {
+        band = nextPlanBand;
+        lastPlanGroupBand = band;
         isFirstInGroup = true;
+        nextPlanBand = nextPlanBand === 0 ? 1 : 0;
+        prevPlanKey = value;
       } else {
+        // Same plan as previous non-empty row → continue the same band
+        band = lastPlanGroupBand;
         isFirstInGroup = false;
       }
-      prevKey = isEmpty ? undefined : value;
-      prevWasEmpty = isEmpty;
-      map.set(n.id, { bandIndex: currentBand, isFirstInGroup });
+      map.set(n.id, { bandIndex: band, isFirstInGroup });
     }
     return map;
   });
