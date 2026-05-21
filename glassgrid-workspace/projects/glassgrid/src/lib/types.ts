@@ -277,6 +277,13 @@ export interface RowClassParams<TRow = unknown> {
   rowIndex: number;
 }
 
+/** Params passed to `getRowStyle` for each rendered row (ag-grid parity). */
+export interface RowStyleParams<TRow = unknown> {
+  data: TRow;
+  node: RowNode<TRow>;
+  rowIndex: number;
+}
+
 /** Loose `gridOptions` bag — a subset of ag-grid GridOptions for drop-in style. */
 export interface GridOptions<TRow = unknown> {
   headerHeight?: number;
@@ -301,6 +308,8 @@ export interface GridOptions<TRow = unknown> {
   datasource?: IDatasource<TRow>;
   /** Returns class name(s) to apply to each row. ag-grid parity. */
   getRowClass?: (params: RowClassParams<TRow>) => string | string[] | null | undefined;
+  /** Returns inline-style map to apply to each row. ag-grid parity. */
+  getRowStyle?: (params: RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined;
 }
 
 // ---- async transactions ----

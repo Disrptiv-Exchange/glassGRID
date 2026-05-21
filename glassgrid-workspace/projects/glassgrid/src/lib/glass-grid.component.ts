@@ -157,6 +157,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    * `[gridOptions].getRowClass` for ag-grid drop-in style.
    */
   readonly getRowClass = input<((params: import('./types').RowClassParams<TRow>) => string | string[] | null | undefined) | null>(null);
+  /**
+   * Optional inline-style callback per row (ag-grid `getRowStyle` parity).
+   * Receives `{ data, node, rowIndex }` and returns a style object suitable
+   * for [ngStyle]. Also resolved from `[gridOptions].getRowStyle` and
+   * `gridApi.setGridOption('getRowStyle', fn)`. The dedicated input wins.
+   */
+  readonly getRowStyle = input<((params: import('./types').RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined) | null>(null);
 
   // server / infinite row models
   readonly serverSideDatasource = input<ServerSideDatasource<TRow> | null>(null);
@@ -2083,6 +2090,21 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       for (const c of result) if (c) out[c] = true;
     }
     return out;
+  }
+
+  /**
+   * Resolve row-level inline styles from the `getRowStyle` callback. Honors
+   * the dedicated [getRowStyle] input, [gridOptions].getRowStyle, and the
+   * runtime override set via `gridApi.setGridOption('getRowStyle', fn)`.
+   */
+  rowStyles(node: RowNode<TRow>, rowIndex: number): Record<string, string | number | null> {
+    const fn =
+      this.getRowStyle() ??
+      (this.gridOptions() as { getRowStyle?: (p: import('./types').RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined } | null)?.getRowStyle ??
+      (this.gridOptionsOverride() as { getRowStyle?: (p: import('./types').RowStyleParams<TRow>) => Record<string, string | number | null> | null | undefined }).getRowStyle;
+    if (!fn) return {};
+    const result = fn({ data: node.data, node, rowIndex });
+    return result ?? {};
   }
 
   cellClasses(col: ResolvedColumn<TRow>, node: RowNode<TRow>): Record<string, boolean> {

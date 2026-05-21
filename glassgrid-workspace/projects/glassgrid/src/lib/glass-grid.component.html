@@ -228,7 +228,7 @@
       <div class="gg-pinned-top" role="rowgroup">
         <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
           @for (n of pinnedTopNodes(); track n.id; let pix = $index) {
-            <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
+            <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
               @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
                 <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
                   @if (cellRendererHtml(col, n); as html) {
@@ -306,6 +306,7 @@
               class="gg-row"
               role="row"
               [ngClass]="rowClasses(entry.row.node, entry.index)"
+              [ngStyle]="rowStyles(entry.row.node, entry.index)"
               [attr.aria-rowindex]="entry.index + 1"
               [attr.aria-selected]="entry.row.node.selected ? 'true' : null"
               [class.gg-row-selected]="entry.row.node.selected"
@@ -449,7 +450,7 @@
       <div class="gg-pinned-bottom" role="rowgroup">
         <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
           @for (n of pinnedBottomNodes(); track n.id; let pix = $index) {
-            <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
+            <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
               @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
                 <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
                   @if (cellRendererHtml(col, n); as html) {
