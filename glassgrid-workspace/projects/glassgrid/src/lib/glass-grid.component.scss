@@ -547,13 +547,27 @@
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
-      height: auto !important;
+      height: 28px !important;
+      min-height: 28px !important;
+      max-height: 28px !important;
+      display: flex !important;
+      align-items: center !important;
       line-height: 1;
       font-size: 12px;
     }
-    // Wrapper — owns the visual frame (border + radius + background).
-    // Reset the .mdc-text-field--filled gray fill that appearance="fill"
-    // bakes in, and the focus overlay that flashes on click.
+    // Wrapper — owns the visual frame (border + radius + background)
+    // AND is responsible for vertical centering of the inner content.
+    //
+    // Material's default `.mdc-text-field--filled` is a 56px-tall block
+    // whose internal flex anchors content to the BASELINE (so the
+    // floating label can sit above the input). With the label hidden
+    // and the wrapper allowed to expand to that 56px, the input text
+    // ends up clinging to the top of the cell rather than centred.
+    //
+    // Force the wrapper to a fixed 28px tall flex container with
+    // `align-items: center`, matching the native input filters' visual
+    // height. Then everything inside (form-field-flex, infix, input,
+    // mat-select-trigger) inherits a proper vertical centre line.
     .mat-mdc-text-field-wrapper,
     .mdc-text-field,
     .mdc-text-field--filled,
@@ -561,10 +575,16 @@
     .floating_filter_dropdown_list .mdc-text-field,
     .floating_filter_dropdown_list .mdc-text-field--filled {
       padding: 0 8px !important;
+      height: 28px !important;
+      min-height: 28px !important;
+      max-height: 28px !important;
       background-color: var(--gg-filter-bg, #fff) !important;
       border: 1px solid var(--gg-filter-border, #d1d5db) !important;
       border-radius: 4px !important;
       box-shadow: none !important;
+      display: flex !important;
+      align-items: center !important;
+      box-sizing: border-box !important;
     }
     .mat-mdc-form-field-focus-overlay,
     .mdc-text-field__ripple,
@@ -597,13 +617,19 @@
     .mdc-line-ripple::after { display: none !important; }
     .mdc-floating-label,
     .mat-mdc-floating-label { display: none !important; }
-    input.mat-mdc-input-element {
+    // Input fills its infix container; the flex + align-items: center
+    // on the form-field-flex + infix takes care of vertical centring.
+    // Explicit line-height matches the wrapper height so the placeholder
+    // text glyph sits dead-centre on the cell's middle line.
+    input.mat-mdc-input-element,
+    .floating_filter_dropdown_list input.mat-mdc-input-element {
       font-size: 12px !important;
-      line-height: 1.2 !important;
+      line-height: 26px !important;
       color: var(--gg-filter-fg, #333) !important;
       padding: 0 !important;
       margin: 0 !important;
-      height: auto !important;
+      height: 26px !important;
+      box-sizing: border-box !important;
     }
     // Icon suffix (datepicker calendar toggle) — center align with input
     // and size down from Material's 48px touch target.
@@ -665,6 +691,23 @@
       flex: 1 1 auto !important;
       max-width: none !important;
       width: auto !important;
+      display: flex !important;
+      align-items: center !important;
+      height: 26px !important;
+      line-height: 26px !important;
+      font-size: 12px !important;
+    }
+    // The placeholder + the selected-value text-line. Material renders
+    // these as <span> children of mat-select-value with their own
+    // line-height/font-size; without explicit values they inherit and
+    // drift above the cell baseline by a few pixels.
+    .mat-mdc-select-placeholder,
+    .mat-mdc-select-min-line,
+    .floating_filter_dropdown_list .mat-mdc-select-placeholder,
+    .floating_filter_dropdown_list .mat-mdc-select-min-line {
+      font-size: 12px !important;
+      line-height: 26px !important;
+      color: var(--gg-filter-fg, #333) !important;
     }
     .mat-mdc-select-arrow-wrapper,
     .floating_filter_dropdown_list .mat-mdc-select-arrow-wrapper {
