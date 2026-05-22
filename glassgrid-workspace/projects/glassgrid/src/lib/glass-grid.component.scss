@@ -630,6 +630,15 @@
     // Angular Material mat-select (StatusFilterComponent) — stretch the
     // trigger to fill the form-field-infix so the dropdown takes the whole
     // cell width (not just the chevron + a hardcoded narrow trigger).
+    //
+    // Padding is explicitly forced to 0 because new_global.scss has
+    // `mat-select.multiselect_status { padding: 0px 4px !important;
+    // font-size: 14px !important }` (consumer global, ag-grid-era),
+    // which would otherwise indent the mat-select trigger 4px more than
+    // the native <select> chevron used by OptionFilterComponent on the
+    // adjacent IsQualified column — breaking visual alignment across
+    // the filter row. The `.floating_filter_dropdown_list <selector>`
+    // variant climbs specificity to (0,2,1) vs the global's (0,1,1).
     mat-select,
     .mat-mdc-select,
     .floating_filter_dropdown_list mat-select,
@@ -637,6 +646,7 @@
       width: 100% !important;
       min-width: 0 !important;
       max-width: 100% !important;
+      padding: 0 !important;
       font-size: 12px !important;
       line-height: 1.2 !important;
       color: var(--gg-filter-fg, #333) !important;
@@ -676,14 +686,11 @@
   z-index: 3;
   background-color: var(--gg-header-bg);
 }
-.gg-floating-filter-cell.gg-pinned-edge-left {
-  border-right: 2px solid var(--gg-accent) !important;
-  z-index: 4;
-}
-.gg-floating-filter-cell.gg-pinned-edge-right {
-  border-left: 2px solid var(--gg-accent) !important;
-  z-index: 4;
-}
+/* Pinned edge border on the floating-filter row used to be 2px here,
+ * which made it look heavier than the matching 1px edge on the header
+ * row and body cells (defined at lines 376-387). Drop the override so
+ * all three pinned-edge tiers — header, floating filter, body — share
+ * the same 1px green accent rule and read as one column boundary. */
 
 .gg-floating-filter-input {
   width: 100%; padding: 3px 6px; font: inherit;
