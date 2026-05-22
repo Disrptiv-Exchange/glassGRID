@@ -422,10 +422,33 @@
  * `display: inline`, leaving Material form fields nothing to be 100%
  * of. Force the host to be a block-level flex child that fills the
  * cell — once that anchor is correct, the Material-specific overrides
- * below can actually take effect. */
-.gg-floating-filter-cell > * {
+ * below can actually take effect.
+ *
+ * `::ng-deep` is REQUIRED here even though the rule looks self-
+ * contained. Without it, Angular's emulated view encapsulation appends
+ * `[_ngcontent-LIB]` to BOTH `.gg-floating-filter-cell` and the `*`,
+ * so the rule only matches DOM elements that themselves carry the
+ * library's content attribute. The consumer's `<app-status-floating-
+ * filter>` host carries the *consumer's* `_ngcontent` attribute, not
+ * the library's — so an un-pierced selector silently fails to match.
+ * ::ng-deep strips encapsulation from the descendant side. */
+.gg-floating-filter-cell ::ng-deep > * {
   display: block !important;
   flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+/* Also target by element name as a defensive belt-and-braces match for
+ * each known custom-filter host. Pure-pseudo `> *` after `::ng-deep`
+ * is occasionally finicky across Angular versions. */
+.gg-floating-filter-cell ::ng-deep app-status-floating-filter,
+.gg-floating-filter-cell ::ng-deep app-date-floating-filter,
+.gg-floating-filter-cell ::ng-deep app-dropdown-filter,
+.gg-floating-filter-cell ::ng-deep app-product-filter,
+.gg-floating-filter-cell ::ng-deep app-supplier-filter {
+  display: block !important;
   width: 100% !important;
   min-width: 0 !important;
   max-width: 100% !important;
