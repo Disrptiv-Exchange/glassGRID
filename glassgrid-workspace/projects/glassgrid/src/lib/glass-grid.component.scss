@@ -435,9 +435,17 @@
  *
  * The Material selectors (.mat-mdc-*) only match when Material is
  * actually in the DOM — degrades gracefully on non-Material pages. */
+/* `::ng-deep` is required so the library's selectors REACH inside
+ * elements rendered by other components (OptionFilterComponent's
+ * <select>, StatusFilterComponent's mat-select, DateFilterComponent's
+ * mat-form-field, etc.). Without ::ng-deep, Angular's emulated view
+ * encapsulation attribute-stamps the selectors and they only match
+ * elements rendered by glass-grid itself. !important is added on
+ * dimensions / borders / fills because consumer filter components
+ * commonly use !important in their own scoped SCSS — load-order
+ * tie-break still goes to consumer-side overrides if any. */
 .gg-floating-filter-cell {
-  // Native input is already styled via .gg-floating-filter-input below;
-  // ensure the height matches the unified contract.
+  // Native input rendered by glass-grid itself (no ::ng-deep needed).
   .gg-floating-filter-input {
     height: 28px;
     min-height: 28px;
@@ -446,75 +454,101 @@
     color: var(--gg-filter-fg, #333);
   }
 
-  // Native <select> used by simple dropdown filters
-  select {
-    height: 28px;
-    min-height: 28px;
-    font-size: 12px;
-    padding: 0 8px;
-    border: 1px solid var(--gg-filter-border, #d1d5db);
-    border-radius: 4px;
-    background-color: var(--gg-filter-bg, #fff);
-    color: var(--gg-filter-fg, #333);
-    box-sizing: border-box;
-  }
+  // Everything else lives inside a child component — pierce encapsulation.
+  ::ng-deep {
+    // Outer wrappers commonly used by ag-grid-era filter components.
+    // Many consumer components wrap their input in
+    // `.ag-floating-filter-body > .ag-wrapper.ag-input-wrapper.ag-text-field-input-wrapper`
+    // with their own paddings / margins that fight the cell. Reset.
+    .ag-floating-filter-body,
+    .floating_filter_dropdown_list,
+    .ag-wrapper,
+    .ag-input-wrapper,
+    .ag-text-field-input-wrapper,
+    .filter-container,
+    .filter-wrapper {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+    }
 
-  // Angular Material mat-form-field
-  mat-form-field {
-    width: 100%;
-    line-height: 1;
-    font-size: 12px;
+    // Native <select> used by OptionFilterComponent and similar dropdowns
+    select {
+      width: 100% !important;
+      height: 28px !important;
+      min-height: 28px !important;
+      font-size: 12px !important;
+      padding: 0 8px !important;
+      border: 1px solid var(--gg-filter-border, #d1d5db) !important;
+      border-radius: 4px !important;
+      background-color: var(--gg-filter-bg, #fff) !important;
+      color: var(--gg-filter-fg, #333) !important;
+      box-sizing: border-box !important;
+      // Restore the browser-native dropdown chevron the components disable.
+      -webkit-appearance: auto !important;
+      appearance: auto !important;
+    }
 
+    // Angular Material mat-form-field (DateFilterComponent)
+    mat-form-field {
+      width: 100% !important;
+      line-height: 1;
+      font-size: 12px;
+    }
     .mat-mdc-text-field-wrapper {
-      padding: 0 8px;
+      padding: 0 8px !important;
       background-color: var(--gg-filter-bg, #fff) !important;
       border: 1px solid var(--gg-filter-border, #d1d5db) !important;
       border-radius: 4px !important;
     }
     .mat-mdc-form-field-flex {
-      min-height: 26px;
-      height: 26px;
+      min-height: 26px !important;
+      height: 26px !important;
       align-items: center;
     }
     .mat-mdc-form-field-infix {
-      min-height: 26px;
-      padding: 0;
-      border-top: 0;
-      width: auto;
+      min-height: 26px !important;
+      padding: 0 !important;
+      border-top: 0 !important;
+      width: auto !important;
     }
-    .mat-mdc-form-field-subscript-wrapper { display: none; }
-    .mat-mdc-form-field-bottom-align::before { display: none; }
+    .mat-mdc-form-field-subscript-wrapper { display: none !important; }
+    .mat-mdc-form-field-bottom-align::before { display: none !important; }
     .mdc-line-ripple,
     .mdc-line-ripple::before,
     .mdc-line-ripple::after { display: none !important; }
     .mdc-floating-label,
     .mat-mdc-floating-label { display: none !important; }
     input.mat-mdc-input-element {
-      font-size: 12px;
-      line-height: 1.2;
-      color: var(--gg-filter-fg, #333);
+      font-size: 12px !important;
+      line-height: 1.2 !important;
+      color: var(--gg-filter-fg, #333) !important;
+      padding: 0 !important;
     }
     .mat-mdc-form-field-icon-suffix,
     .mat-mdc-icon-button {
-      width: 24px;
-      height: 24px;
-      padding: 0;
+      width: 24px !important;
+      height: 24px !important;
+      padding: 0 !important;
     }
-  }
 
-  // Angular Material mat-select trigger
-  mat-select {
-    font-size: 12px;
-    line-height: 1.2;
-    color: var(--gg-filter-fg, #333);
-  }
-  .mat-mdc-select-trigger {
-    height: 26px;
-    min-height: 26px;
-    padding: 0;
-  }
-  .mat-mdc-select-arrow-wrapper {
-    height: 24px;
+    // Angular Material mat-select (StatusFilterComponent)
+    mat-select {
+      font-size: 12px !important;
+      line-height: 1.2 !important;
+      color: var(--gg-filter-fg, #333) !important;
+    }
+    .mat-mdc-select-trigger {
+      height: 26px !important;
+      min-height: 26px !important;
+      padding: 0 !important;
+    }
+    .mat-mdc-select-arrow-wrapper {
+      height: 24px !important;
+    }
   }
 }
 
@@ -602,8 +636,15 @@
   box-shadow: inset 0 0 0 1px var(--gg-range-border);
 }
 .gg-cell-editing { padding: 0; }
+/* Pinned body cells: background inherits from the row so banded /
+ * hover / selected colours propagate uniformly across pinned and
+ * non-pinned halves. The previous `box-shadow: 0 0 0 1px var(--gg-border)`
+ * is REMOVED in v0.4.30 — it painted a 1px ring around every pinned
+ * cell, which doubled with the row's bottom border and read as the
+ * pinned columns being subtly darker. The pinned-edge accent border
+ * already marks the boundary; no additional shadow needed. */
 .gg-cell.gg-col-pinned-left, .gg-cell.gg-col-pinned-right {
-  background: inherit; box-shadow: 0 0 0 1px var(--gg-border);
+  background: inherit;
 }
 
 .gg-cell-editor {
