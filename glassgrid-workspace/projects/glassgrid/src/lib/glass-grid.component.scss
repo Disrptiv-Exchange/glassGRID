@@ -368,15 +368,21 @@
   background-color: inherit;
 }
 
-/* Green divider between pinned and unpinned column groups */
+/* Divider between pinned and unpinned column groups. 1px to keep the
+ * pinned area looking as visually neutral as possible — the previous
+ * 2px green stripe read as a "different" column block on banded rows
+ * and made the pinned area appear weightier than the rest. 1px is a
+ * gentler marker that still indicates the pinned edge. */
 .gg-header-cell.gg-pinned-edge-left,
-.gg-cell.gg-pinned-edge-left {
-  border-right: 2px solid var(--gg-accent) !important;
+.gg-cell.gg-pinned-edge-left,
+.gg-floating-filter-cell.gg-pinned-edge-left {
+  border-right: 1px solid var(--gg-accent) !important;
   z-index: 4;
 }
 .gg-header-cell.gg-pinned-edge-right,
-.gg-cell.gg-pinned-edge-right {
-  border-left: 2px solid var(--gg-accent) !important;
+.gg-cell.gg-pinned-edge-right,
+.gg-floating-filter-cell.gg-pinned-edge-right {
+  border-left: 1px solid var(--gg-accent) !important;
   z-index: 4;
 }
 .gg-header-cell.gg-filter-active { color: var(--gg-accent); }
@@ -408,6 +414,108 @@
 .gg-floating-filter-cell {
   display: flex; align-items: center; padding: 0 6px;
   border-right: 1px solid var(--gg-border);
+}
+
+/* ─── Floating-filter visual unification ─────────────────────────────
+ * Custom floating-filter components plug in via the registry pattern
+ * (`floatingFilterComponent: 'statusFilterComponent'`) and are often
+ * built with Angular Material. Material's default chrome (form-field
+ * underline ripple, floating label, fill background, ~36-44px height)
+ * does not harmonise with glass-grid's compact native filter input.
+ *
+ * These selectors normalise every common filter input type — native
+ * <input>, native <select>, Material mat-form-field, Material
+ * mat-select — to one visual contract:
+ *     28px tall · 12px font · 4px radius · 1px border · #fff fill
+ *
+ * Customise via CSS variables on a parent / on :host:
+ *     --gg-filter-bg     (default #fff)
+ *     --gg-filter-border (default #d1d5db)
+ *     --gg-filter-fg     (default #333)
+ *
+ * The Material selectors (.mat-mdc-*) only match when Material is
+ * actually in the DOM — degrades gracefully on non-Material pages. */
+.gg-floating-filter-cell {
+  // Native input is already styled via .gg-floating-filter-input below;
+  // ensure the height matches the unified contract.
+  .gg-floating-filter-input {
+    height: 28px;
+    min-height: 28px;
+    border-color: var(--gg-filter-border, #d1d5db);
+    background-color: var(--gg-filter-bg, #fff);
+    color: var(--gg-filter-fg, #333);
+  }
+
+  // Native <select> used by simple dropdown filters
+  select {
+    height: 28px;
+    min-height: 28px;
+    font-size: 12px;
+    padding: 0 8px;
+    border: 1px solid var(--gg-filter-border, #d1d5db);
+    border-radius: 4px;
+    background-color: var(--gg-filter-bg, #fff);
+    color: var(--gg-filter-fg, #333);
+    box-sizing: border-box;
+  }
+
+  // Angular Material mat-form-field
+  mat-form-field {
+    width: 100%;
+    line-height: 1;
+    font-size: 12px;
+
+    .mat-mdc-text-field-wrapper {
+      padding: 0 8px;
+      background-color: var(--gg-filter-bg, #fff) !important;
+      border: 1px solid var(--gg-filter-border, #d1d5db) !important;
+      border-radius: 4px !important;
+    }
+    .mat-mdc-form-field-flex {
+      min-height: 26px;
+      height: 26px;
+      align-items: center;
+    }
+    .mat-mdc-form-field-infix {
+      min-height: 26px;
+      padding: 0;
+      border-top: 0;
+      width: auto;
+    }
+    .mat-mdc-form-field-subscript-wrapper { display: none; }
+    .mat-mdc-form-field-bottom-align::before { display: none; }
+    .mdc-line-ripple,
+    .mdc-line-ripple::before,
+    .mdc-line-ripple::after { display: none !important; }
+    .mdc-floating-label,
+    .mat-mdc-floating-label { display: none !important; }
+    input.mat-mdc-input-element {
+      font-size: 12px;
+      line-height: 1.2;
+      color: var(--gg-filter-fg, #333);
+    }
+    .mat-mdc-form-field-icon-suffix,
+    .mat-mdc-icon-button {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+    }
+  }
+
+  // Angular Material mat-select trigger
+  mat-select {
+    font-size: 12px;
+    line-height: 1.2;
+    color: var(--gg-filter-fg, #333);
+  }
+  .mat-mdc-select-trigger {
+    height: 26px;
+    min-height: 26px;
+    padding: 0;
+  }
+  .mat-mdc-select-arrow-wrapper {
+    height: 24px;
+  }
 }
 
 /* Pinned floating-filter cells need the same opaque-tile treatment as
