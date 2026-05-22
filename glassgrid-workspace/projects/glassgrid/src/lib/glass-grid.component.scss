@@ -416,6 +416,22 @@
   border-right: 1px solid var(--gg-border);
 }
 
+/* The dynamically-mounted custom filter component is a child of the
+ * filter cell. Its host element (e.g. <app-status-floating-filter>,
+ * <app-date-floating-filter>) is a custom element which defaults to
+ * `display: inline`, leaving Material form fields nothing to be 100%
+ * of. Force the host to be a block-level flex child that fills the
+ * cell — once that anchor is correct, the Material-specific overrides
+ * below can actually take effect. */
+.gg-floating-filter-cell > * {
+  display: block !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
 /* ─── Floating-filter visual unification ─────────────────────────────
  * Custom floating-filter components plug in via the registry pattern
  * (`floatingFilterComponent: 'statusFilterComponent'`) and are often
@@ -495,20 +511,32 @@
     // Angular Material mat-form-field (DateFilterComponent, StatusFilterComponent)
     // Strip every variant of mat-form-field chrome (fill / outline / standard)
     // so what remains is a flat 28px-tall rectangle matching native inputs.
-    mat-form-field {
+    //
+    // Specificity note: tms-global.scss (loaded as a global stylesheet)
+    // has `.floating_filter_dropdown_list mat-form-field { min-width: 80px !important; height: 24px !important }`
+    // and a related `width: 130px !important` variant from the ag-grid era.
+    // Match the same descendant chain inside `.floating_filter_dropdown_list`
+    // so we win the specificity tie at (0,3,1) vs the global's (0,1,1)
+    // — instead of relying on Angular's component-style injection order.
+    mat-form-field,
+    .floating_filter_dropdown_list mat-form-field,
+    .floating_filter_dropdown_list .mat-mdc-form-field {
       width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+      height: auto !important;
       line-height: 1;
       font-size: 12px;
-    }
-    .mat-mdc-form-field {
-      width: 100% !important;
     }
     // Wrapper — owns the visual frame (border + radius + background).
     // Reset the .mdc-text-field--filled gray fill that appearance="fill"
     // bakes in, and the focus overlay that flashes on click.
     .mat-mdc-text-field-wrapper,
     .mdc-text-field,
-    .mdc-text-field--filled {
+    .mdc-text-field--filled,
+    .floating_filter_dropdown_list .mat-mdc-text-field-wrapper,
+    .floating_filter_dropdown_list .mdc-text-field,
+    .floating_filter_dropdown_list .mdc-text-field--filled {
       padding: 0 8px !important;
       background-color: var(--gg-filter-bg, #fff) !important;
       border: 1px solid var(--gg-filter-border, #d1d5db) !important;
@@ -516,17 +544,23 @@
       box-shadow: none !important;
     }
     .mat-mdc-form-field-focus-overlay,
-    .mdc-text-field__ripple { display: none !important; }
-    .mat-mdc-form-field-flex {
+    .mdc-text-field__ripple,
+    .floating_filter_dropdown_list .mat-mdc-form-field-focus-overlay,
+    .floating_filter_dropdown_list .mdc-text-field__ripple { display: none !important; }
+    .mat-mdc-form-field-flex,
+    .floating_filter_dropdown_list .mat-mdc-form-field-flex {
       width: 100% !important;
       min-height: 26px !important;
       height: 26px !important;
-      align-items: center;
+      align-items: center !important;
       padding: 0 !important;
+      margin: 0 !important;
     }
-    .mat-mdc-form-field-infix {
+    .mat-mdc-form-field-infix,
+    .floating_filter_dropdown_list .mat-mdc-form-field-infix {
       flex: 1 1 auto !important;
       min-height: 26px !important;
+      height: 26px !important;
       padding: 0 !important;
       border-top: 0 !important;
       width: auto !important;
@@ -574,13 +608,18 @@
     // trigger to fill the form-field-infix so the dropdown takes the whole
     // cell width (not just the chevron + a hardcoded narrow trigger).
     mat-select,
-    .mat-mdc-select {
+    .mat-mdc-select,
+    .floating_filter_dropdown_list mat-select,
+    .floating_filter_dropdown_list .mat-mdc-select {
       width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
       font-size: 12px !important;
       line-height: 1.2 !important;
       color: var(--gg-filter-fg, #333) !important;
     }
-    .mat-mdc-select-trigger {
+    .mat-mdc-select-trigger,
+    .floating_filter_dropdown_list .mat-mdc-select-trigger {
       width: 100% !important;
       height: 26px !important;
       min-height: 26px !important;
@@ -588,11 +627,14 @@
       display: flex !important;
       align-items: center !important;
     }
-    .mat-mdc-select-value {
+    .mat-mdc-select-value,
+    .floating_filter_dropdown_list .mat-mdc-select-value {
       flex: 1 1 auto !important;
       max-width: none !important;
+      width: auto !important;
     }
-    .mat-mdc-select-arrow-wrapper {
+    .mat-mdc-select-arrow-wrapper,
+    .floating_filter_dropdown_list .mat-mdc-select-arrow-wrapper {
       height: 22px !important;
       display: flex !important;
       align-items: center !important;
