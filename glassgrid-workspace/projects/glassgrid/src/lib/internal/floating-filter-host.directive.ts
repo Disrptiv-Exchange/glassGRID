@@ -114,6 +114,15 @@ export class FloatingFilterHostDirective implements OnChanges, OnDestroy {
     // Notify with the current filter item right after mount so the
     // component can sync its UI to the existing filter state.
     this.notifyParentModelChanged();
+
+    // agInit assigns plain fields on the instance (this.label, this.values,
+    // etc.). For default-strategy components Angular eventually picks these
+    // up on the next CD pass, but the FIRST render can land *before* those
+    // assignments are reflected in the template — visible as empty
+    // placeholder text on dropdowns whose `label` is set inside agInit.
+    // Explicitly trigger CD now so the component re-renders with the
+    // post-agInit state.
+    this.ref.changeDetectorRef.detectChanges();
   }
 
   private notifyParentModelChanged(): void {
@@ -121,6 +130,10 @@ export class FloatingFilterHostDirective implements OnChanges, OnDestroy {
     const instance = this.ref.instance;
     if (typeof instance.onParentModelChanged === 'function') {
       instance.onParentModelChanged(this.currentFilterItem());
+      // Same reasoning as in mountComponent — onParentModelChanged is a
+      // plain method call; Angular needs an explicit nudge to re-render
+      // with the component's updated fields.
+      this.ref.changeDetectorRef.detectChanges();
     }
   }
 
