@@ -112,8 +112,16 @@ export class FloatingFilterHostDirective implements OnChanges, OnDestroy {
     }
 
     // Notify with the current filter item right after mount so the
-    // component can sync its UI to the existing filter state.
-    this.notifyParentModelChanged();
+    // component can sync its UI to the existing filter state — but ONLY
+    // when there's an actual filter value to sync. Many ag-grid-era
+    // components implement `onParentModelChanged(null)` as
+    // `selectedvalue = null`, which de-selects their "(All)" placeholder
+    // option whose value is `""`. Skipping the no-op null call preserves
+    // the initial state set by agInit (e.g. `selectedvalue = ""`).
+    const initial = this.currentFilterItem();
+    if (initial !== null && initial !== undefined) {
+      this.notifyParentModelChanged();
+    }
 
     // agInit assigns plain fields on the instance (this.label, this.values,
     // etc.). For default-strategy components Angular eventually picks these
