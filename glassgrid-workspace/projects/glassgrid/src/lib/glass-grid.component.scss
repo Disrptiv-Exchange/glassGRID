@@ -348,24 +348,35 @@
   background: var(--gg-header-bg);
 }
 
-/* Pinned body cells inherit the row's background-color. Two reasons:
- *  1. They must be OPAQUE so non-pinned columns scroll *under* them, not
- *     visible *through* them (the row text-bleed bug fixed in v0.4.24).
- *  2. They must follow whatever colour the row is currently showing —
- *     default, odd-row zebra, hover, selected, getRowStyle inline tint,
- *     or [rowBandingByField] banded — so pinned and non-pinned halves of
- *     the same row render with one unified colour (the pinned vs
- *     non-pinned mismatch fixed in v0.4.23).
+/* Pinned body cells must be OPAQUE so non-pinned columns scroll *under*
+ * them, not visible *through* them (the row text-bleed bug fixed in
+ * v0.4.24), and they must follow whatever colour the row is currently
+ * showing (default, odd-row zebra, hover, selected, banded …) so pinned
+ * and non-pinned halves of the same row render unified (the pinned vs
+ * non-pinned mismatch fixed in v0.4.23).
  *
- * `background-color: inherit` solves both at once: pinned cells pick up
- * whatever the row resolved its background-color to (class rule, inline
- * style from [getRowStyle], anything), without per-state overrides
- * needing to be replicated on the cell. */
+ * The original `background-color: inherit` approach had a subtle bug:
+ * Chromium computes the inherited background-color from the parent's
+ * COMPUTED background-color, which the `.gg-row { background: var(...) }`
+ * shorthand does populate — but only AFTER paint commit. During fast
+ * horizontal scroll the sticky pinned cell can paint a transparent
+ * frame between the row's background-image layer and the next paint of
+ * the inherited background-color, momentarily revealing the scrolling
+ * non-pinned columns underneath. The result was perceptible "text
+ * bleed-through" on pinned cells when scrolling.
+ *
+ * v0.4.38 switches to an explicit cascaded CSS variable:
+ * `.gg-row` sets `--gg-row-current-bg` to whatever colour it's drawing,
+ * and `.gg-cell.gg-pinned-*` reads that variable directly. No reliance
+ * on Chromium's inherited-color recomputation timing; pinned cells are
+ * always painted with an explicit colour and the bleed-through stops.
+ * Consumer pages can still override `--gg-row-current-bg` per row for
+ * custom banding without touching cells (see sales-order-list.page.scss). */
 .gg-cell.gg-pinned-left,
 .gg-cell.gg-pinned-right {
   position: sticky;
   z-index: 3;
-  background-color: inherit;
+  background-color: var(--gg-row-current-bg, var(--gg-bg)) !important;
 }
 
 /* Divider between pinned and unpinned column groups. 1px to keep the
@@ -750,13 +761,14 @@
   position: absolute; left: 0; top: 0;
   display: flex; align-items: stretch;
   border-bottom: 1px solid var(--gg-border);
-  background: var(--gg-bg);
+  --gg-row-current-bg: var(--gg-bg);
+  background-color: var(--gg-row-current-bg);
   will-change: transform;
   transition: background-color var(--gg-anim-duration) var(--gg-anim-easing);
 }
-.gg-row.gg-row-odd { background: var(--gg-row-odd-bg); }
-.gg-row:hover { background: var(--gg-row-hover-bg); }
-.gg-row.gg-row-selected { background: var(--gg-row-selected-bg); color: var(--gg-row-selected-fg); }
+.gg-row.gg-row-odd { --gg-row-current-bg: var(--gg-row-odd-bg); background-color: var(--gg-row-current-bg); }
+.gg-row:hover { --gg-row-current-bg: var(--gg-row-hover-bg); background-color: var(--gg-row-current-bg); }
+.gg-row.gg-row-selected { --gg-row-current-bg: var(--gg-row-selected-bg); background-color: var(--gg-row-current-bg); color: var(--gg-row-selected-fg); }
 .gg-row.gg-row-dragging { opacity: 0.5; }
 .gg-row.gg-row-drop-target { outline: 2px solid var(--gg-accent); outline-offset: -2px; z-index: 2; }
 .gg-row.gg-row-group {
@@ -885,7 +897,8 @@
 .gg-row-pinned {
   position: relative !important;
   transform: none !important;
-  background: color-mix(in srgb, var(--gg-accent) 4%, var(--gg-bg));
+  --gg-row-current-bg: color-mix(in srgb, var(--gg-accent) 4%, var(--gg-bg));
+  background-color: var(--gg-row-current-bg);
   font-weight: 500;
 }
 
@@ -1124,7 +1137,8 @@
 // They scroll inside the body, but always sit at the visual top / bottom of the data band
 // and are immune to pagination + filtering.
 .gg-row-pinned-top, .gg-row-pinned-bottom {
-  background: color-mix(in srgb, var(--gg-accent) 5%, var(--gg-bg));
+  --gg-row-current-bg: color-mix(in srgb, var(--gg-accent) 5%, var(--gg-bg));
+  background-color: var(--gg-row-current-bg);
   font-weight: 500;
   border-bottom: 2px solid color-mix(in srgb, var(--gg-accent) 35%, var(--gg-border));
 }
