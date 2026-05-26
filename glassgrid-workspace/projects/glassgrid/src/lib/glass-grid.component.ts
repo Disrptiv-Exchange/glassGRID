@@ -86,6 +86,7 @@ import { buildHeaderTree, type ResolvedColumnGroup, type HeaderTree } from './in
 import { pivotTransform } from './internal/pivot';
 import { toExcelXml, downloadExcel } from './internal/excel-export';
 import { FloatingFilterHostDirective } from './internal/floating-filter-host.directive';
+import { CellNodeDirective } from './internal/cell-node.directive';
 
 interface RenderColumn<TRow> extends ResolvedColumn<TRow> {
   computedWidth: number;
@@ -119,7 +120,7 @@ function escapeHtml(s: string): string {
 @Component({
   selector: 'glass-grid',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgComponentOutlet, FloatingFilterHostDirective],
+  imports: [CommonModule, FormsModule, NgComponentOutlet, FloatingFilterHostDirective, CellNodeDirective],
   templateUrl: './glass-grid.component.html',
   styleUrl: './glass-grid.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -2140,6 +2141,23 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const v = getCellValue(col.colDef, node);
     return formatCellValue(col.colDef, node, v);
   }
+  /**
+   * Memoisation cache for cellRenderer returns that are real DOM nodes
+   * (`HTMLElement`). One entry per (row, column) tracking the last
+   * `(value, formattedValue)` signature; if the inputs haven't changed we
+   * return the SAME `Node` reference so the template's `[ggCellNode]`
+   * directive sees identity equality and leaves the DOM untouched.
+   *
+   * This is what makes ag-grid-era `cellRenderer` returns that attach
+   * event listeners (`el.addEventListener('click', ...)`) actually work —
+   * the same node sticks around across change-detection cycles, so
+   * mousedown.target === mouseup.target and the browser fires `click`.
+   *
+   * `WeakMap` on the row node lets the entry be garbage-collected when the
+   * row leaves the viewport (infinite/virtual scroll), preventing leaks.
+   */
+  private readonly cellNodeCache = new WeakMap<RowNode<TRow>, Map<string, { node: Node; value: unknown; formatted: string }>>();
+
   cellRendererHtml(col: ResolvedColumn<TRow>, node: RowNode<TRow>): SafeHtml | null {
     const value = getCellValue(col.colDef, node);
     const formattedValue = formatCellValue(col.colDef, node, value);
@@ -2154,17 +2172,60 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       html = this.builtInRenderer(r, value, formattedValue, node);
     } else {
       const out = r(params);
+      // If the renderer returned an HTMLElement, do NOT serialise it here —
+      // the Node path (cellRendererNode) handles those with caching so
+      // attached event listeners survive. Returning null here lets the
+      // template fall through to `@if (cellRendererNode(...))` first.
       if (typeof out === 'string') html = out;
-      else if (out && typeof (out as Node).nodeType === 'number') {
-        // Renderer returned an HTMLElement / DOM Node (ag-grid pattern, e.g. via Renderer2).
-        // Serialise to HTML and pass through DomSanitizer.
-        const tmp = document.createElement('div');
-        tmp.appendChild(out as Node);
-        html = tmp.innerHTML;
-      }
+      else return null;
     }
     if (html == null) return null;
     return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  /**
+   * DOM-node rendering path for ag-grid-era `cellRenderer` functions that
+   * return an `HTMLElement` (typically with `addEventListener` wired up).
+   * Returns the SAME `Node` reference across CD cycles for unchanged
+   * (value, formattedValue) pairs — required so the browser sees a stable
+   * mousedown→mouseup target and fires `click`.
+   *
+   * The `[ggCellNode]` directive mounts the returned node into the cell.
+   * When the value changes we call the renderer again and replace the
+   * cached node atomically.
+   *
+   * Returns null when the renderer is a string (built-in) or returns a
+   * string — those paths go through `cellRendererHtml` instead.
+   */
+  cellRendererNode(col: ResolvedColumn<TRow>, node: RowNode<TRow>): Node | null {
+    const r = col.colDef.cellRenderer;
+    // Only function renderers participate; string-name renderers are built-ins
+    // and never return a DOM node. cellRendererSelector also routes through
+    // the same logic — fall back if it ends up returning a Node-style fn.
+    if (typeof r !== 'function' && !col.colDef.cellRendererSelector) return null;
+
+    const value = getCellValue(col.colDef, node);
+    const formatted = formatCellValue(col.colDef, node, value);
+
+    let rowCache = this.cellNodeCache.get(node);
+    if (!rowCache) {
+      rowCache = new Map();
+      this.cellNodeCache.set(node, rowCache);
+    }
+    const cached = rowCache.get(col.colId);
+    if (cached && cached.value === value && cached.formatted === formatted) {
+      return cached.node;
+    }
+
+    const params = { value, formattedValue: formatted, data: node.data, node, colDef: col.colDef };
+    const sel = col.colDef.cellRendererSelector?.(params);
+    const fn = sel?.component ?? r;
+    if (typeof fn !== 'function') return null;
+
+    const out = fn(params);
+    if (!out || typeof (out as Node).nodeType !== 'number') return null; // string path
+    rowCache.set(col.colId, { node: out as Node, value, formatted });
+    return out as Node;
   }
 
   /** Built-in renderer names: agAnimateShowChange, agAnimateSlide, agGroup, agCheckbox. */

@@ -239,10 +239,14 @@
             <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
               @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
                 <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
-                  @if (cellRendererHtml(col, n); as html) {
-                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                  @if (cellRendererNode(col, n); as node) {
+                    <span class="gg-cell-renderer" [ggCellNode]="node"></span>
                   } @else {
-                    <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                    @if (cellRendererHtml(col, n); as html) {
+                      <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                    } @else {
+                      <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                    }
                   }
                 </div>
               }
@@ -429,10 +433,14 @@
                         *ngComponentOutlet="cmp; inputs: cellComponentInputs(col, entry.row.node)"
                       />
                     } @else {
-                      @if (cellRendererHtml(col, entry.row.node); as html) {
-                        <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                      @if (cellRendererNode(col, entry.row.node); as node) {
+                        <span class="gg-cell-renderer" [ggCellNode]="node"></span>
                       } @else {
-                        <span class="gg-cell-text">{{ cellText(col, entry.row.node) }}</span>
+                        @if (cellRendererHtml(col, entry.row.node); as html) {
+                          <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                        } @else {
+                          <span class="gg-cell-text">{{ cellText(col, entry.row.node) }}</span>
+                        }
                       }
                     }
                   }
@@ -463,10 +471,14 @@
             <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
               @for (col of renderColumns(); track trackByCol($index, col); let ci = $index) {
                 <div role="gridcell" [ngClass]="cellClasses(col, n)" [ngStyle]="cellStyles(col, n)">
-                  @if (cellRendererHtml(col, n); as html) {
-                    <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                  @if (cellRendererNode(col, n); as node) {
+                    <span class="gg-cell-renderer" [ggCellNode]="node"></span>
                   } @else {
-                    <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                    @if (cellRendererHtml(col, n); as html) {
+                      <span class="gg-cell-renderer" [innerHTML]="html"></span>
+                    } @else {
+                      <span class="gg-cell-text">{{ cellText(col, n) }}</span>
+                    }
                   }
                 </div>
               }

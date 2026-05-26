@@ -100,13 +100,25 @@ export class FloatingFilterHostDirective implements OnChanges, OnDestroy {
     }
 
     // New (glass-grid) style — set the `params` field if the component
-    // declares one. Safe whether it's a signal input or a plain property;
-    // Angular's set-input handles signal-input writes correctly.
+    // declares one. Two paths:
+    //   1. Modern signal-input components (declared with `input()`):
+    //      use `ref.setInput('params', adapted)`.
+    //   2. ag-grid-era components where `params` is just a plain class
+    //      field (no @Input decorator): write directly to the instance.
+    //
+    // We DON'T call `setInput` unconditionally and catch the throw,
+    // because Angular's NG0303 error fires from inside `setInput` BEFORE
+    // the throw bubbles out — meaning the console gets polluted with
+    // false-positive errors for every legacy filter component. Probe
+    // for a registered input on the ComponentDef first; if not found,
+    // skip straight to the direct assignment path.
     if ('params' in instance) {
-      try {
-        this.ref.setInput('params', adapted);
-      } catch {
-        // Not a declared input — fall back to direct assignment (plain field).
+      const cmpDef = (this.ref.componentType as { ɵcmp?: { inputs?: Record<string, unknown> } }).ɵcmp;
+      const isSignalInput = !!cmpDef?.inputs && 'params' in cmpDef.inputs;
+      if (isSignalInput) {
+        try { this.ref.setInput('params', adapted); } catch { /* swallow */ }
+      } else {
+        // Plain field (ag-grid-style `params!: IFloatingFilterParams`).
         try { instance.params = adapted; } catch { /* readonly */ }
       }
     }
