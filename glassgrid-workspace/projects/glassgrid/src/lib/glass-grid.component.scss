@@ -352,26 +352,36 @@
  * them, not visible *through* them (the row text-bleed bug fixed in
  * v0.4.24), and they must follow whatever colour the row is currently
  * showing (default, odd-row zebra, hover, selected, banded …) so pinned
- * and non-pinned halves of the same row render unified (the pinned vs
- * non-pinned mismatch fixed in v0.4.23).
+ * and non-pinned halves of the same row render unified.
  *
- * The original `background-color: inherit` approach had a subtle bug:
+ * IMPORTANT — class-name discipline: body cells use the
+ *   `.gg-col-pinned-left` / `.gg-col-pinned-right`
+ * classes (added by `cellClasses()` as `gg-col-pinned-${col.pinned}`).
+ * Header cells, floating-filter cells, and the pinned-edge marker use
+ * the shorter `.gg-pinned-left` / `.gg-pinned-right`. Selectors below
+ * cover BOTH forms so consumer pages that wrote either variant
+ * historically still see effect, and the library rule actually applies
+ * to body cells (the original v0.4.38 attempt missed them because it
+ * only targeted the short form).
+ *
+ * The previous `background-color: inherit` approach had a subtle bug:
  * Chromium computes the inherited background-color from the parent's
  * COMPUTED background-color, which the `.gg-row { background: var(...) }`
  * shorthand does populate — but only AFTER paint commit. During fast
  * horizontal scroll the sticky pinned cell can paint a transparent
  * frame between the row's background-image layer and the next paint of
  * the inherited background-color, momentarily revealing the scrolling
- * non-pinned columns underneath. The result was perceptible "text
- * bleed-through" on pinned cells when scrolling.
+ * non-pinned columns underneath.
  *
- * v0.4.38 switches to an explicit cascaded CSS variable:
- * `.gg-row` sets `--gg-row-current-bg` to whatever colour it's drawing,
- * and `.gg-cell.gg-pinned-*` reads that variable directly. No reliance
- * on Chromium's inherited-color recomputation timing; pinned cells are
- * always painted with an explicit colour and the bleed-through stops.
- * Consumer pages can still override `--gg-row-current-bg` per row for
- * custom banding without touching cells (see sales-order-list.page.scss). */
+ * Switch to an explicit cascaded CSS variable: `.gg-row` sets
+ * `--gg-row-current-bg` to whatever colour it's drawing, and pinned
+ * body cells read that variable directly. No reliance on inherited-
+ * color recomputation timing; pinned cells are always painted with an
+ * explicit colour and the bleed-through stops. Consumer pages can
+ * still override `--gg-row-current-bg` per row for custom banding
+ * without touching cells (see sales-order-list.page.scss). */
+.gg-cell.gg-col-pinned-left,
+.gg-cell.gg-col-pinned-right,
 .gg-cell.gg-pinned-left,
 .gg-cell.gg-pinned-right {
   position: sticky;
@@ -813,14 +823,14 @@
 .gg-cell-editing { padding: 0; }
 /* Pinned body cells: background inherits from the row so banded /
  * hover / selected colours propagate uniformly across pinned and
- * non-pinned halves. The previous `box-shadow: 0 0 0 1px var(--gg-border)`
- * is REMOVED in v0.4.30 — it painted a 1px ring around every pinned
- * cell, which doubled with the row's bottom border and read as the
- * pinned columns being subtly darker. The pinned-edge accent border
- * already marks the boundary; no additional shadow needed. */
-.gg-cell.gg-col-pinned-left, .gg-cell.gg-col-pinned-right {
-  background: inherit;
-}
+ * non-pinned halves.
+ *
+ * (Legacy `.gg-cell.gg-col-pinned-* { background: inherit }` block
+ * removed in v0.4.39 — the canonical pinned-cell rule using the
+ * `--gg-row-current-bg` cascade now lives in the main pinned-cell
+ * block above, which targets BOTH `.gg-col-pinned-*` and the
+ * shorter `.gg-pinned-*` selectors so body cells, header cells,
+ * and floating-filter cells share one rule.) */
 
 .gg-cell-editor {
   flex: 1 1 auto; width: 100%; height: 100%;
