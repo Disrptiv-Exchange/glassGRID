@@ -87,6 +87,7 @@ import { pivotTransform } from './internal/pivot';
 import { toExcelXml, downloadExcel } from './internal/excel-export';
 import { FloatingFilterHostDirective } from './internal/floating-filter-host.directive';
 import { CellNodeDirective } from './internal/cell-node.directive';
+import { CellEditorHostDirective } from './internal/cell-editor-host.directive';
 
 interface RenderColumn<TRow> extends ResolvedColumn<TRow> {
   computedWidth: number;
@@ -113,6 +114,16 @@ interface UndoEntry {
 
 const FIND_HIGHLIGHT_CLASS = 'gg-find-match';
 
+/**
+ * Built-in `cellEditor` string names handled by the native editor
+ * template (`<input>` / `<select>` / `<textarea>`). Any OTHER string
+ * value is treated as a registry key for a custom editor component
+ * (ag-grid `cellEditor: 'myEditorComponent'` pattern).
+ */
+const BUILT_IN_EDITOR_NAMES = new Set<string>([
+  'text', 'number', 'select', 'date', 'checkbox', 'largeText',
+]);
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -120,7 +131,7 @@ function escapeHtml(s: string): string {
 @Component({
   selector: 'glass-grid',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgComponentOutlet, FloatingFilterHostDirective, CellNodeDirective],
+  imports: [CommonModule, FormsModule, NgComponentOutlet, FloatingFilterHostDirective, CellNodeDirective, CellEditorHostDirective],
   templateUrl: './glass-grid.component.html',
   styleUrl: './glass-grid.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -1800,7 +1811,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   }
   editorTypeFor(col: ResolvedColumn<TRow>): 'text' | 'number' | 'select' | 'date' | 'checkbox' | 'largeText' | 'custom' {
     const e = col.colDef.cellEditor;
-    if (typeof e === 'string') return e;
+    if (typeof e === 'string') {
+      // Built-in names map to native editors; any other string is a custom
+      // component registry key handled by the cell-editor host directive.
+      return BUILT_IN_EDITOR_NAMES.has(e) ? (e as 'text' | 'number' | 'select' | 'date' | 'checkbox' | 'largeText') : 'custom';
+    }
     if (typeof e === 'function') return 'custom';
     const ft = resolveFilterType(col.colDef.filter);
     if (ft === 'number') return 'number';
@@ -2509,6 +2524,127 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     };
     const extra = col.colDef.cellComponentInputs ?? {};
     return { params, ...extra };
+  }
+
+  // ===== custom cell editor (ag-grid `cellEditor` component) =====
+
+  /** Currently-mounted custom editor host (only one cell edits at a time). */
+  private activeCellEditor: CellEditorHostDirective | null = null;
+
+  /**
+   * Resolve a custom editor COMPONENT for the editing column. Two forms:
+   *   1. `cellEditor: SomeComponent` (class reference)
+   *   2. `cellEditor: 'shiftDropdownComponent'` (string id) looked up in the
+   *      `[components]` registry / `gridOptions.components`.
+   * Returns null for built-in string editors ('text'|'number'|'select'|
+   *   'date'|'checkbox'|'largeText') and when no match is found — those go
+   *   through the native input/select editor path.
+   */
+  cellEditorComponentType(col: ResolvedColumn<TRow>): Type<unknown> | null {
+    const c = col.colDef.cellEditor;
+    if (!c) return null;
+    if (typeof c === 'function') return c as Type<unknown>;
+    if (typeof c === 'string') {
+      // built-in editor type names handled by the native editor template
+      if (BUILT_IN_EDITOR_NAMES.has(c)) return null;
+      const registry =
+        this.components() ??
+        (this.gridOptions() as { components?: Record<string, unknown> } | null)?.components ??
+        null;
+      const found = registry?.[c];
+      return (found && typeof found === 'function') ? (found as Type<unknown>) : null;
+    }
+    return null;
+  }
+
+  /** True when the editing column uses a custom editor component (not a native input). */
+  hasCustomCellEditor(col: ResolvedColumn<TRow>): boolean {
+    return this.cellEditorComponentType(col) != null;
+  }
+
+  /**
+   * ag-grid-shaped params for a custom cell editor. Merges the column's
+   * `cellEditorParams` (object or `(p) => object`) with the core shape:
+   * value, data, node, colDef, column, api, plus `stopEditing(cancel?)`
+   * which the editor calls to finish — the grid then reads `getValue()`.
+   */
+  cellEditorAgGridParams(col: ResolvedColumn<TRow>, node: RowNode<TRow>): Record<string, unknown> {
+    const value = getCellValue(col.colDef, node);
+    const formattedValue = formatCellValue(col.colDef, node, value);
+    const base: Record<string, unknown> = {
+      value,
+      formattedValue,
+      data: node.data,
+      node,
+      colDef: col.colDef,
+      column: {
+        getColId: () => col.colId,
+        getColDef: () => col.colDef,
+      },
+      api: this.api,
+      columnApi: this.api,
+      // editors call this to finish; cancel=true discards (no commit).
+      stopEditing: (cancel?: boolean) => this.finishCustomEdit(!!cancel),
+    };
+    const cep = col.colDef.cellEditorParams as
+      | Record<string, unknown>
+      | ((p: Record<string, unknown>) => Record<string, unknown>)
+      | undefined;
+    const extras: Record<string, unknown> =
+      typeof cep === 'function' ? (cep(base) ?? {}) : (cep ?? {});
+    return { ...base, ...extras };
+  }
+
+  /** Called by the editor host directive once the editor is mounted. */
+  onCellEditorReady(host: CellEditorHostDirective): void {
+    this.activeCellEditor = host;
+  }
+
+  /**
+   * Finish a custom-editor edit. Reads `getValue()` from the mounted editor,
+   * commits the value through the same pipeline as native editors (so
+   * editedValues / undo / cellValueChanged / onCellValueChanged all fire),
+   * then tears the editor down.
+   */
+  finishCustomEdit(cancel: boolean): void {
+    const e = this.editingCell();
+    const host = this.activeCellEditor;
+    if (!e) { this.activeCellEditor = null; return; }
+    if (cancel || !host) {
+      this.activeCellEditor = null;
+      this.cancelEdit();
+      return;
+    }
+
+    const col = this.columnsWithState().find((c) => c.colId === e.colId);
+    const node = this.pagedRows()[e.rowIndex];
+    const newValue = host.getValue();
+    this.activeCellEditor = null;
+
+    if (!col || node?.kind !== 'leaf' || !node.node) { this.editingCell.set(null); return; }
+
+    const changed = newValue !== e.oldValue;
+    if (changed) {
+      const map = new Map(this.editedValues());
+      const rowMap = new Map(map.get(node.node.id) ?? new Map());
+      rowMap.set(e.colId, newValue);
+      map.set(node.node.id, rowMap);
+      this.editedValues.set(map);
+      this.undoStack.push({ rowId: node.node.id, colId: e.colId, oldValue: e.oldValue, newValue });
+      this.redoStack.length = 0;
+      if (this.enableCellChangeFlash()) this.flashCell(node.node.id, e.colId);
+      const evt = { data: node.node.data, node: node.node, colDef: col.colDef, oldValue: e.oldValue as never, newValue: newValue as never };
+      this.cellValueChanged.emit(evt);
+      // ag-grid parity: colDef.onCellValueChanged callback
+      const cb = (col.colDef as { onCellValueChanged?: (e: unknown) => void }).onCellValueChanged;
+      if (typeof cb === 'function') { try { cb(evt); } catch { /* consumer handler threw */ } }
+    }
+    this.editingCell.set(null);
+    this.cellEditingStopped.emit({
+      data: node.node.data, node: node.node, colDef: col.colDef,
+      oldValue: e.oldValue as never, newValue: newValue as never, valueChanged: changed,
+    });
+    queueMicrotask(() => this.viewportRef?.nativeElement.focus());
   }
 
   /** Compute the visible width of a column-group cell by summing widths of its rendered children. */

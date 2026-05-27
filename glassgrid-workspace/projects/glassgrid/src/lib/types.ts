@@ -146,9 +146,21 @@ export interface ColumnDef<TRow = unknown, TValue = unknown> {
 
   // editing — phase 2
   editable?: boolean | ((params: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow, TValue> }) => boolean);
-  cellEditor?: BuiltInCellEditor | CellEditorFactory<TRow, TValue>;
-  cellEditorParams?: Record<string, unknown>;
+  /**
+   * Built-in editor name, a custom-editor factory, a component CLASS, or a
+   * STRING registry key resolved against `[components]` (ag-grid
+   * `cellEditor: 'myEditorComponent'` pattern). Component editors implement
+   * agInit/getValue/afterGuiAttached — mounted via the cell-editor host.
+   */
+  cellEditor?: BuiltInCellEditor | string | CellEditorFactory<TRow, TValue> | CellEditorComponentType;
+  /**
+   * Params merged into the custom editor's agInit params. Object or a
+   * function of the base params (ag-grid allows both).
+   */
+  cellEditorParams?: Record<string, unknown> | ((params: Record<string, unknown>) => Record<string, unknown>);
   cellEditorPopup?: boolean;
+  /** ag-grid parity — fired after a cell edit commits with a changed value. */
+  onCellValueChanged?: (event: { data: TRow; node: RowNode<TRow>; colDef: ColumnDef<TRow, TValue>; oldValue: TValue; newValue: TValue }) => void;
   valueParser?: (params: { newValue: string; oldValue: TValue; data: TRow; colDef: ColumnDef<TRow, TValue> }) => TValue;
   valueSetter?: (params: { newValue: TValue; oldValue: TValue; data: TRow; colDef: ColumnDef<TRow, TValue> }) => boolean;
 
@@ -194,6 +206,11 @@ export type CellRenderer<TRow = unknown, TValue = unknown> =
 
 // ---- editing ----
 export type BuiltInCellEditor = 'text' | 'number' | 'select' | 'date' | 'checkbox' | 'largeText';
+/**
+ * A custom editor component class (Angular `Type`). Kept structural here
+ * (a constructable) so types.ts stays free of an @angular/core import.
+ */
+export type CellEditorComponentType = new (...args: never[]) => object;
 export type AggFunc = 'sum' | 'min' | 'max' | 'avg' | 'count' | 'first' | 'last';
 
 export interface CellEditorParams<TRow = unknown, TValue = unknown> {

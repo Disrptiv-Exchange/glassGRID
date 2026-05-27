@@ -381,6 +381,18 @@
                     >{{ isExpandedDetail(entry.row.node) ? '▾' : '▸' }}</button>
                   }
                   @if (isEditing) {
+                    @if (cellEditorComponentType(col); as editorCmp) {
+                      <!-- ag-grid custom cellEditor component. The host
+                           directive mounts it, calls agInit + afterGuiAttached,
+                           and the editor signals completion via
+                           params.stopEditing → finishCustomEdit, which reads
+                           getValue(). -->
+                      <ng-container
+                        [ggCellEditorHost]="editorCmp"
+                        [ggEditorParams]="cellEditorAgGridParams(col, entry.row.node)"
+                        (ggEditorReady)="onCellEditorReady($event)"
+                      />
+                    } @else {
                     @switch (editorTypeFor(col)) {
                       @case ('select') {
                         <select
@@ -426,6 +438,7 @@
                           autofocus
                         />
                       }
+                    }
                     }
                   } @else {
                     @if (cellComponentType(col); as cmp) {
