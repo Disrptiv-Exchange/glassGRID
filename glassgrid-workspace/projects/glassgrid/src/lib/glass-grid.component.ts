@@ -1805,6 +1805,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   // ===== editing =====
   private tryStartEdit(node: RowNode<TRow>, col: ResolvedColumn<TRow>, rowIndex: number) {
     if (!this.isEditable(node, col)) return;
+    // If a different cell is already editing, finish it first — ag-grid
+    // commits the open editor when another cell is clicked. Without this the
+    // previous custom editor (and its consumer-managed loading overlay) is
+    // left dangling, which manifests as a stuck loading state on re-edit.
+    const cur = this.editingCell();
+    if (cur) {
+      if (cur.rowIndex === rowIndex && cur.colId === col.colId) return; // already editing this cell
+      if (this.activeCellEditor) this.finishCustomEdit(false);
+      else this.commitEdit(this.viewportRef ? (this.viewportRef.nativeElement.querySelector('.gg-cell-editor') as HTMLInputElement)?.value ?? '' : '');
+    }
     const oldValue = getCellValue(col.colDef, node);
     this.editingCell.set({ rowIndex, colId: col.colId, oldValue, popup: !!col.colDef.cellEditorPopup });
     // Build custom-editor params ONCE (see customEditorParams doc). null for
@@ -2064,6 +2074,34 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   @HostListener('document:mouseup') onDocMouseUp() {
     this.rangeDragging.set(false);
     if (this.fillState()) this.commitFill();
+  }
+
+  /**
+   * Commit an open CUSTOM editor when the user mousedowns outside both the
+   * editing cell and the editor's own popup (mat-select / datepicker render
+   * their panels in a CDK overlay attached to document.body, so a click
+   * there must NOT stop editing). Mirrors ag-grid's
+   * `stopEditingWhenCellsLoseFocus`. Native editors already handle this via
+   * their (blur) handler.
+   */
+  @HostListener('document:mousedown', ['$event'])
+  onDocMouseDownForEditing(ev: MouseEvent) {
+    if (!this.activeCellEditor || !this.editingCell()) return;
+    if (!this.stopEditingWhenCellsLoseFocus()) return;
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    // Inside a CDK overlay (the editor's dropdown/calendar) → keep editing.
+    if (target.closest('.cdk-overlay-container, .cdk-overlay-pane, .mat-mdc-select-panel, .mat-datepicker-popup, .mat-datepicker-content, .cdk-overlay-backdrop')) return;
+    // Inside the editing cell itself → keep editing.
+    if (target.closest('.gg-cell-renderer, .gg-cell-editor, [ggcelleditorhost], glass-grid .gg-cell.gg-editing')) {
+      // still inside SOME cell — only keep editing if it's the editing cell.
+      // Fall through to the geometry check below for safety.
+    }
+    // Defer so a click that lands on another editable cell runs its own
+    // tryStartEdit first (which finishes this edit) — avoids double commit.
+    queueMicrotask(() => {
+      if (this.activeCellEditor && this.editingCell()) this.finishCustomEdit(false);
+    });
   }
   isCellInRange(rowIndex: number, colIndex: number): boolean {
     for (const r of this.ranges()) {
@@ -2600,8 +2638,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       },
       api: this.api,
       columnApi: this.api,
-      // editors call this to finish; cancel=true discards (no commit).
-      stopEditing: (cancel?: boolean) => this.finishCustomEdit(!!cancel),
+      // ag-grid contract: the editor's `params.stopEditing(arg)` ALWAYS
+      // commits — `arg` is `suppressNavigateAfterEdit`, NOT a cancel flag.
+      // (Editors like ShiftDropdownComponent call stopEditing(true) meaning
+      // "don't move focus after", and still expect the value committed.)
+      // Cancelling is the grid's job (Escape key → cancelEdit). So here we
+      // always commit via finishCustomEdit(false).
+      stopEditing: (_suppressNavigateAfterEdit?: boolean) => this.finishCustomEdit(false),
     };
     const cep = col.colDef.cellEditorParams as
       | Record<string, unknown>

@@ -391,11 +391,13 @@
                            detection — so a side-effectful cellEditorParams
                            function (e.g. showLoadingOverlay) doesn't write
                            signals during render (NG0600). -->
-                      <ng-container
-                        [ggCellEditorHost]="editorCmp"
-                        [ggEditorParams]="customEditorParams()"
-                        (ggEditorReady)="onCellEditorReady($event)"
-                      />
+                      <span class="gg-cell-editor-host">
+                        <ng-container
+                          [ggCellEditorHost]="editorCmp"
+                          [ggEditorParams]="customEditorParams()"
+                          (ggEditorReady)="onCellEditorReady($event)"
+                        />
+                      </span>
                     } @else {
                     @switch (editorTypeFor(col)) {
                       @case ('select') {

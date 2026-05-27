@@ -869,6 +869,22 @@
  * shorter `.gg-pinned-*` selectors so body cells, header cells,
  * and floating-filter cells share one rule.) */
 
+/* Custom cell-editor component host — let the editor fill the cell width
+ * so its control (mat-select trigger, datepicker input) isn't squeezed
+ * into a corner. The editor's popup (mat-select panel / calendar) renders
+ * in a CDK overlay attached to body, so it's never clipped by the cell. */
+.gg-cell-editor-host {
+  display: flex; flex: 1 1 auto; align-items: center;
+  width: 100%; min-width: 0; height: 100%;
+}
+.gg-cell-editor-host > *,
+.gg-cell-editor-host ::ng-deep > * {
+  display: block; width: 100%; min-width: 0;
+}
+/* While a custom editor is mounted, give the control room to render its
+ * full height instead of being clipped to the compact row height. */
+.gg-cell:has(.gg-cell-editor-host) { overflow: visible; }
+
 .gg-cell-editor {
   flex: 1 1 auto; width: 100%; height: 100%;
   padding: 0 var(--gg-cell-padding-x);
