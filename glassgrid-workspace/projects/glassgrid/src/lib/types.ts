@@ -574,6 +574,24 @@ export interface RowNode<TRow = unknown> {
   readonly rowIndex: number;
   /** True if selected. */
   selected: boolean;
+
+  /* ─── ag-grid compatibility methods (added v0.4.42) ───
+   * Existing consumer pages call ag-grid's RowNode API directly inside
+   * `forEachNode` / event callbacks. Implementing the common methods
+   * here lets those pages compile and run without rewriting their
+   * selection / mutation logic.
+   *
+   * Optional in the interface so synthetic nodes (e.g. group-aggregate
+   * placeholder rows) don't have to provide them; real body rows always
+   * do — they're populated by `nodes()` in glass-grid.component.ts. */
+  setSelected?(selected: boolean): void;
+  isSelected?(): boolean;
+
+  /** Replace the row's data and trigger a re-render. ag-grid API parity. */
+  setData?(newData: TRow): void;
+
+  /** Update a single field on the row data. ag-grid API parity. */
+  setDataValue?(colKey: string, newValue: unknown): void;
 }
 
 export interface SortModelItem {
@@ -769,6 +787,22 @@ export interface GridApi<TRow = unknown> {
   deselectAll(): void;
   getSelectedRows(): TRow[];
   getSelectedNodes(): RowNode<TRow>[];
+
+  /* ag-grid compatibility surface added in v0.4.42. Optional on the
+   * interface so the library's own internal call sites don't have to
+   * provide them, but the runtime api object in glass-grid.component.ts
+   * always populates them — consumer pages calling
+   * `gridApi.getRowNode(id)`, `gridApi.autoSizeColumns(cols)`,
+   * `gridApi.setDatasource(ds)`, `gridApi.setCacheBlockSize(n)`,
+   * `gridApi.onFilterChanged()`, `gridApi.showNoRowsOverlay()`, or
+   * `gridApi.getFilterInstance(field).setModel(m)` will find them. */
+  getRowNode?(id: string): RowNode<TRow> | undefined;
+  autoSizeColumns?(cols?: string[], skipHeader?: boolean): void;
+  setDatasource?(ds: unknown): void;
+  setCacheBlockSize?(size: number): void;
+  onFilterChanged?(): void;
+  showNoRowsOverlay?(): void;
+  getFilterInstance?(colKey: string): { setModel(model: unknown): void; getModel(): unknown };
 
   // pagination
   paginationGoToPage(page: number): void;

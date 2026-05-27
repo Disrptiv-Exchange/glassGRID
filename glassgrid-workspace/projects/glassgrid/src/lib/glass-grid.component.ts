@@ -481,11 +481,49 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       // apply any in-place edits to a shallow row copy
       const overrides = edited.get(id);
       const effectiveRow = overrides ? this.applyOverrides(row, overrides) : row;
+      const self = this;
       const node: RowNode<TRow> = {
         id,
         data: effectiveRow,
         rowIndex: i,
         selected: this.selectedIds().has(id),
+
+        // ag-grid compat: node-level selection mutators. Consumer pages
+        // do `forEachNode(n => n.setSelected(false))` to clear selection
+        // row-by-row (typical ag-grid pattern). Mirror that here.
+        setSelected(selected: boolean): void {
+          self.selectedIds.update((set) => {
+            const next = new Set(set);
+            if (selected) next.add(id);
+            else next.delete(id);
+            return next;
+          });
+        },
+        isSelected(): boolean {
+          return self.selectedIds().has(id);
+        },
+
+        // ag-grid compat: in-place data mutation. Used by editor renderers
+        // and consumer-side optimistic updates.
+        setData(newData: TRow): void {
+          const arr = self.rowData() ?? [];
+          const idx = arr.findIndex((r, j) => {
+            const rid = idFn ? idFn(r) : (r as { id?: string | number }).id != null
+              ? String((r as { id: string | number }).id) : `_n${j}`;
+            return rid === id;
+          });
+          if (idx >= 0) {
+            const next = [...arr];
+            next[idx] = newData;
+            // route through localRowData so signal triggers a render
+            self.localRowData.set(next as TRow[]);
+          }
+        },
+        setDataValue(colKey: string, newValue: unknown): void {
+          const cur: Record<string, unknown> = { ...(effectiveRow as Record<string, unknown>) };
+          cur[colKey] = newValue;
+          this.setData!(cur as TRow);
+        },
       };
       return node;
     });
@@ -2974,6 +3012,62 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       forEachNodeAfterFilterAndSort(cb) { self.sortedFilteredNodes().forEach((n, i) => cb(n, i)); },
 
       getDisplayedRowCount() { return self.totalDisplayed(); },
+
+      // ---- ag-grid compat: node lookup ----
+      // Returns the RowNode by its id (whatever getRowId produces).
+      getRowNode(id: string) {
+        return self.nodes().find((n) => n.id === id);
+      },
+
+      // ---- ag-grid compat: column autosize ----
+      // Consumer pages call api.autoSizeColumns(cols) — route to the
+      // existing sizeColumnsToFit() since per-column width measurement
+      // isn't implemented yet. autoSizeAllColumns() already exists above
+      // (around line 2680) with a proper per-column width pass.
+      autoSizeColumns(_cols?: string[], _skipHeader?: boolean) {
+        self.api.sizeColumnsToFit?.();
+      },
+
+      // ---- ag-grid compat: cache block size + datasource ----
+      // Synonym for setGridOption('datasource', ds) / ('cacheBlockSize', n).
+      setDatasource(ds: unknown) {
+        self.api.setGridOption?.('datasource' as never, ds as never);
+      },
+      setCacheBlockSize(size: number) {
+        self.api.setGridOption?.('cacheBlockSize' as never, size as never);
+      },
+
+      // ---- ag-grid compat: explicit filter refresh ----
+      // Consumer pages call `gridApi.onFilterChanged()` after mutating
+      // filter state externally. Re-fetch the active block.
+      onFilterChanged() {
+        self.api.refreshInfiniteCache?.();
+      },
+
+      // ---- ag-grid compat: no-rows overlay ----
+      showNoRowsOverlay() { self.loadingOverlayInternal.set(true); },
+
+      // ---- ag-grid compat: legacy floating filter access ----
+      // ag-grid's `getFilterInstance(field)` returned a per-column filter
+      // controller. glass-grid's floating filters self-manage their state
+      // via parentFilterInstance/onFloatingFilterChanged. Return a stub
+      // with the methods consumer code actually calls so callers don't
+      // crash. setModel forwards to setFilterModel for the column.
+      getFilterInstance(colKey: string) {
+        return {
+          setModel(model: unknown) {
+            const current = (self.api.getFilterModel?.() as Record<string, unknown>) ?? {};
+            const next = { ...current };
+            if (model == null) delete next[colKey];
+            else next[colKey] = model;
+            self.api.setFilterModel?.(next as never);
+          },
+          getModel() {
+            const m = (self.api.getFilterModel?.() as Record<string, unknown>) ?? {};
+            return m[colKey];
+          },
+        };
+      },
 
       // ---- ag-grid setGridOption ----
       setGridOption(key, value) {
