@@ -3339,6 +3339,20 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         // (so a refresh while on page >1 doesn't render an empty slice while
         // block 0 is in flight), then re-fetch the first block. Selection is
         // cleared by the caller (RefreshGrid → deselectAll).
+        //
+        // CRITICAL: also clear the in-memory edit overlay. glassgrid keeps
+        // committed cell edits in `editedValues` (keyed by row id) and merges
+        // them over the row data in the `nodes()` computed. ag-grid has no
+        // such overlay — an edit lives on node.data and a refresh replaces
+        // the whole row. Without clearing here, a refresh re-fetches fresh
+        // server rows but RE-APPLIES the old edits on top (same row ids), so
+        // edited columns like Shift / Pick Up Date keep showing the last
+        // picked value instead of the server's. The consumer has already
+        // persisted the edit (onCellValueChanged → save → Update button), so
+        // the server response is the source of truth now — drop the overlay.
+        self.editedValues.set(new Map());
+        self.undoStack.length = 0;
+        self.redoStack.length = 0;
         self.infiniteFetched.clear();
         self.localRowData.set([]);
         self.currentPage.set(0);
