@@ -432,6 +432,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   // editing
   protected readonly editingCell = signal<EditState | null>(null);
+  /**
+   * Params for the currently-mounted custom cell editor, built ONCE when
+   * editing starts (so the consumer's `cellEditorParams` function — which
+   * may have side effects like showLoadingOverlay() — runs exactly once,
+   * never during template evaluation). The template binds this signal
+   * instead of calling cellEditorAgGridParams() per change-detection,
+   * which previously triggered an NG0600 signal-write-during-render loop.
+   */
+  protected readonly customEditorParams = signal<Record<string, unknown> | null>(null);
   private readonly undoStack: UndoEntry[] = [];
   private readonly redoStack: UndoEntry[] = [];
   /** In-place value overrides (used so we don't mutate the input rowData array). */
@@ -1798,6 +1807,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (!this.isEditable(node, col)) return;
     const oldValue = getCellValue(col.colDef, node);
     this.editingCell.set({ rowIndex, colId: col.colId, oldValue, popup: !!col.colDef.cellEditorPopup });
+    // Build custom-editor params ONCE (see customEditorParams doc). null for
+    // native editors.
+    this.customEditorParams.set(
+      this.cellEditorComponentType(col) ? this.cellEditorAgGridParams(col, node) : null,
+    );
     this.cellEditingStarted.emit({ data: node.data, node, colDef: col.colDef, oldValue });
   }
   private isEditable(node: RowNode<TRow>, col: ResolvedColumn<TRow>): boolean {
@@ -1865,6 +1879,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       this.cellValueChanged.emit({ data: node.node.data, node: node.node, colDef: col.colDef, oldValue: e.oldValue as never, newValue: parsed as never });
     }
     this.editingCell.set(null);
+    this.customEditorParams.set(null);
     this.cellEditingStopped.emit({
       data: node.node.data, node: node.node, colDef: col.colDef,
       oldValue: e.oldValue as never, newValue: parsed as never, valueChanged: changed,
@@ -1877,6 +1892,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const col = this.columnsWithState().find((c) => c.colId === e.colId);
     const node = this.pagedRows()[e.rowIndex];
     this.editingCell.set(null);
+    this.customEditorParams.set(null);
+    this.activeCellEditor = null;
     if (col && node?.kind === 'leaf' && node.node) {
       this.cellEditingStopped.emit({
         data: node.node.data, node: node.node, colDef: col.colDef,
@@ -2621,6 +2638,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const newValue = host.getValue();
     this.activeCellEditor = null;
 
+    this.customEditorParams.set(null);
     if (!col || node?.kind !== 'leaf' || !node.node) { this.editingCell.set(null); return; }
 
     const changed = newValue !== e.oldValue;
@@ -2874,7 +2892,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         const row = self.pagedRows()[rowIndex];
         if (col && row?.kind === 'leaf' && row.node) self.tryStartEdit(row.node, col, rowIndex);
       },
-      stopEditing(cancel) { if (cancel) self.cancelEdit(); else self.commitEdit(''); },
+      stopEditing(cancel) {
+        // Route to the custom-editor commit path when one is active so we
+        // read getValue() instead of the (non-existent) native input.
+        if (self.activeCellEditor) { self.finishCustomEdit(!!cancel); return; }
+        if (cancel) self.cancelEdit(); else self.commitEdit('');
+      },
       getEditingCell() {
         const e = self.editingCell();
         return e ? { rowIndex: e.rowIndex, colId: e.colId } : null;

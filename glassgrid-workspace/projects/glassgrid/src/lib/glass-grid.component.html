@@ -386,10 +386,14 @@
                            directive mounts it, calls agInit + afterGuiAttached,
                            and the editor signals completion via
                            params.stopEditing → finishCustomEdit, which reads
-                           getValue(). -->
+                           getValue(). Params are built ONCE at edit-start
+                           (customEditorParams signal) — never per change-
+                           detection — so a side-effectful cellEditorParams
+                           function (e.g. showLoadingOverlay) doesn't write
+                           signals during render (NG0600). -->
                       <ng-container
                         [ggCellEditorHost]="editorCmp"
-                        [ggEditorParams]="cellEditorAgGridParams(col, entry.row.node)"
+                        [ggEditorParams]="customEditorParams()"
                         (ggEditorReady)="onCellEditorReady($event)"
                       />
                     } @else {
