@@ -491,7 +491,25 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         // ag-grid compat: node-level selection mutators. Consumer pages
         // do `forEachNode(n => n.setSelected(false))` to clear selection
         // row-by-row (typical ag-grid pattern). Mirror that here.
+        //
+        // CRITICAL — match ag-grid's no-op semantics when state is
+        // unchanged. ag-grid's `setSelected(false)` on an already-
+        // unselected row does NOT fire `selectionChanged`. Returning
+        // early here matters because consumer click handlers commonly
+        // run `forEachNode(n => n.setSelected(false))` as a "deselect-
+        // everything" preamble before opening a popup with row-specific
+        // data. If we mutate `selectedIds` on every call (even no-ops),
+        // the resulting `selectionChanged` event fires after the click
+        // handler returns, runs the page's `onSelectionChanged` which
+        // typically resets state via `CalculatingSummaryCount(
+        // getSelectedRows(), false)`, and overwrites the data the popup
+        // was about to render. Symptom: popup opens with all fields
+        // blank and "From *: undefined (undefined)". The early return
+        // makes this scenario truly idempotent — same behaviour as
+        // ag-grid.
         setSelected(selected: boolean): void {
+          const currentlySelected = self.selectedIds().has(id);
+          if (currentlySelected === selected) return;
           self.selectedIds.update((set) => {
             const next = new Set(set);
             if (selected) next.add(id);
