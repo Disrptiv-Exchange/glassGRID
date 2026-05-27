@@ -3124,7 +3124,23 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         if (left < vp.scrollLeft) vp.scrollLeft = left;
         else if (right > vp.scrollLeft + vp.clientWidth) vp.scrollLeft = right - vp.clientWidth;
       },
-      refreshCells() { /* signals re-derive */ },
+      refreshCells(_params?: unknown) {
+        // ag-grid editors mutate `node.data` IN PLACE (e.g. ShiftDropdown
+        // sets d.Shift on sibling rows) then call refreshCells({force:true})
+        // to repaint. glassgrid projects rows through the `nodes()` computed,
+        // which only recomputes when the rowData ARRAY REFERENCE changes — an
+        // in-place mutation alone won't repaint. Re-set localRowData to a
+        // fresh array (same element refs, new array identity) so `nodes()`
+        // re-derives and every cell re-reads its (mutated) value. This is the
+        // signal-native equivalent of ag-grid's forced cell refresh.
+        const cur = self.localRowData() ?? self.rowData() ?? [];
+        self.localRowData.set(cur.slice());
+      },
+      // ag-grid alias — full row redraw. Same mechanism as refreshCells here.
+      redrawRows(_params?: unknown) {
+        const cur = self.localRowData() ?? self.rowData() ?? [];
+        self.localRowData.set(cur.slice());
+      },
       destroy() { /* host removal handles cleanup */ },
 
       // ---- column groups ----
@@ -3318,8 +3334,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       refreshInfiniteCache() {
         const ds = self.attachedDatasource();
         if (!ds) return;
-        self.localRowData.set([]);
+        // Match ag-grid's refresh semantics for a consumer-initiated reload:
+        // purge every cached block, reset to the first page + top scroll
+        // (so a refresh while on page >1 doesn't render an empty slice while
+        // block 0 is in flight), then re-fetch the first block. Selection is
+        // cleared by the caller (RefreshGrid → deselectAll).
         self.infiniteFetched.clear();
+        self.localRowData.set([]);
+        self.currentPage.set(0);
+        const vp = self.viewportRef?.nativeElement;
+        if (vp) vp.scrollTop = 0;
         self.fetchInfiniteBlock(0);
       },
       purgeInfiniteCache() { self.api.refreshInfiniteCache(); },

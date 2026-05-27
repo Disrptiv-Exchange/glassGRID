@@ -835,7 +835,10 @@ export interface GridApi<TRow = unknown> {
   // misc
   ensureIndexVisible(index: number, position?: 'top' | 'middle' | 'bottom'): void;
   ensureColumnVisible(colId: string): void;
-  refreshCells(): void;
+  /** Force a cell repaint. Accepts ag-grid's params shape ({rowNodes, columns, force}) which is ignored — glassgrid repaints all visible cells. */
+  refreshCells(params?: unknown): void;
+  /** ag-grid alias — full row redraw. Repaints visible cells (params ignored). */
+  redrawRows?(params?: unknown): void;
   destroy(): void;
 
   // column groups
