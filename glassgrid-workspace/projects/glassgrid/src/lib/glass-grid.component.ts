@@ -2090,13 +2090,24 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (!this.stopEditingWhenCellsLoseFocus()) return;
     const target = ev.target as HTMLElement | null;
     if (!target) return;
-    // Inside a CDK overlay (the editor's dropdown/calendar) → keep editing.
+
+    // KEEP editing if the click is inside the editor's popup — the
+    // mat-select panel / datepicker calendar render in a CDK overlay
+    // attached to document.body, so a click there is part of editing.
     if (target.closest('.cdk-overlay-container, .cdk-overlay-pane, .mat-mdc-select-panel, .mat-datepicker-popup, .mat-datepicker-content, .cdk-overlay-backdrop')) return;
-    // Inside the editing cell itself → keep editing.
-    if (target.closest('.gg-cell-renderer, .gg-cell-editor, [ggcelleditorhost], glass-grid .gg-cell.gg-editing')) {
-      // still inside SOME cell — only keep editing if it's the editing cell.
-      // Fall through to the geometry check below for safety.
-    }
+
+    // KEEP editing if the click is inside the editor control itself
+    // (e.g. clicking the mat-select trigger a SECOND time to reopen the
+    // dropdown). ag-grid keeps the cell in edit mode when you click the
+    // cell you're already editing — only an OUTSIDE click commits.
+    if (target.closest('.gg-cell-editor-host, .gg-cell-editor')) return;
+
+    // KEEP editing if the click landed on the SAME cell that owns the
+    // editor (e.g. the cell padding around the control).
+    const clickedCell = target.closest('.gg-cell');
+    if (clickedCell && clickedCell.querySelector('.gg-cell-editor-host, .gg-cell-editor')) return;
+
+    // Otherwise the click is genuinely outside the editing cell → commit.
     // Defer so a click that lands on another editable cell runs its own
     // tryStartEdit first (which finishes this edit) — avoids double commit.
     queueMicrotask(() => {
