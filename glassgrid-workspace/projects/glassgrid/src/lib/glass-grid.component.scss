@@ -841,6 +841,16 @@
   /* Spec: body row data uses font-weight 400 by default. */
   font-weight: 400;
 }
+/* Allow native browser text selection inside body cells when the consumer
+ * opts in via `[enableCellTextSelection]="true"` or `gridOptions.enableCellTextSelection`.
+ * Default is on (see component input). Headers, drag handles, and pagination
+ * stay non-selectable so click-to-sort and drag-to-resize keep working. */
+:host(.gg-cell-text-selection) .gg-cell,
+:host(.gg-cell-text-selection) .gg-cell .gg-cell-text,
+:host(.gg-cell-text-selection) .gg-cell .gg-cell-renderer {
+  user-select: text;
+  -webkit-user-select: text;
+}
 .gg-cell .gg-cell-text { font-weight: 400; }
 .gg-cell .gg-cell-text {
   flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

@@ -148,6 +148,7 @@ function escapeHtml(s: string): string {
     '[attr.data-wrap-header]': 'wrapHeaderText() ? "true" : null',
     '[attr.data-auto-header-height]': 'autoHeaderHeight() ? "true" : null',
     '[attr.data-sticky-groups]': 'stickyGroupRows() ? "true" : null',
+    '[class.gg-cell-text-selection]': '(gridOptions()?.enableCellTextSelection ?? enableCellTextSelection())',
   },
 })
 export class GlassGridComponent<TRow extends object = Record<string, unknown>> implements OnDestroy {
@@ -263,6 +264,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   readonly darkMode = input(false);
   readonly animateRows = input(true);
   readonly enableCellChangeFlash = input(false);
+  /** Allow native browser text selection inside body cells (drag-highlight +
+   *  Ctrl+C copies the highlighted text fragment). Defaults to true so every
+   *  consumer gets copy-able cell text out of the box, matching the ag-grid
+   *  option of the same name. Set to false to restore range-only selection. */
+  readonly enableCellTextSelection = input(true);
   readonly multiSortKey = input<'ctrl' | 'always'>('always');
 
   readonly loading = input(false);
@@ -1730,7 +1736,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (!totalRows || !cols) return;
 
     // global shortcuts
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c') { this.copySelectionToClipboard(); ev.preventDefault(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c') {
+      // If the user has highlighted plain text inside a body cell (browser-level
+      // selection), let the browser's default Ctrl+C copy that fragment — only
+      // fall back to the library's TSV cell-range copy when no text is selected.
+      // Matches ag-grid behaviour and pairs with enableCellTextSelection.
+      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+      const hasTextSelection = !!sel && !sel.isCollapsed && sel.toString().length > 0;
+      if (hasTextSelection) return;
+      this.copySelectionToClipboard();
+      ev.preventDefault();
+      return;
+    }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a') { this.api.selectAll(); ev.preventDefault(); return; }
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) { this.api.undoCellEditing(); ev.preventDefault(); return; }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y' || (ev.key.toLowerCase() === 'z' && ev.shiftKey))) { this.api.redoCellEditing(); ev.preventDefault(); return; }
