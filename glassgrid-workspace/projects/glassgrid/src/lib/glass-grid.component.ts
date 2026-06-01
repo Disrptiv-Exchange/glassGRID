@@ -471,6 +471,20 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   protected readonly findQuery = signal('');
   protected readonly findMatches = signal<{ rowIndex: number; colIndex: number }[]>([]);
   protected readonly findIndex = signal(-1);
+  /** Map of `${nodeId}:${colIndex}` → true for every find match in the current
+   *  page. Built once when matches change so cellClasses() lookup is O(1).
+   *  Cells rendered via `cellRenderer` (HTMLElement or component) still get
+   *  the `gg-find-match` class; the SCSS overlay tint works on top of the
+   *  custom renderer's own background. */
+  protected readonly findMatchKeys = computed(() => {
+    const keys = new Set<string>();
+    const rows = this.pagedRows();
+    for (const m of this.findMatches()) {
+      const row = rows[m.rowIndex];
+      if (row?.kind === 'leaf' && row.node) keys.add(`${row.node.id}:${m.colIndex}`);
+    }
+    return keys;
+  });
 
   // side bar
   protected readonly sideBarVisible = signal(false);
@@ -2552,11 +2566,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       }
     }
     if (this.flashCells().has(`${node.id}:${col.colId}`)) out['gg-flash'] = true;
-    if (this.findIndex() >= 0) {
-      const m = this.findMatches()[this.findIndex()];
+    const matchKeys = this.findMatchKeys();
+    if (matchKeys.size > 0) {
       const colIndex = this.renderColumns().findIndex((c) => c.colId === col.colId);
-      if (m && this.pagedRows()[m.rowIndex]?.kind === 'leaf' && this.pagedRows()[m.rowIndex]?.node?.id === node.id && m.colIndex === colIndex) {
+      if (colIndex >= 0 && matchKeys.has(`${node.id}:${colIndex}`)) {
         out[FIND_HIGHLIGHT_CLASS] = true;
+        const cur = this.findMatches()[this.findIndex()];
+        if (cur && cur.colIndex === colIndex) {
+          const curRow = this.pagedRows()[cur.rowIndex];
+          if (curRow?.kind === 'leaf' && curRow.node?.id === node.id) {
+            out['gg-find-match-current'] = true;
+          }
+        }
       }
     }
     return out;
