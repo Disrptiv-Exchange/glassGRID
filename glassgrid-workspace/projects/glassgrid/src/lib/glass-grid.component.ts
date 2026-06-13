@@ -485,6 +485,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     }
     return keys;
   });
+  /** Map of `colId → index` in renderColumns(). Rebuilds only when the column
+   *  list changes, so cellClasses()'s colIndex lookup is O(1) instead of the
+   *  prior O(C) `.findIndex(...)`. At 700k+ cell-class evaluations × 25 cols
+   *  on cold loads this removes ~18M comparisons from the main thread. */
+  protected readonly colIdToIndex = computed(() => {
+    const map = new Map<string, number>();
+    const cols = this.renderColumns();
+    for (let i = 0; i < cols.length; i++) map.set(cols[i]!.colId, i);
+    return map;
+  });
 
   // side bar
   protected readonly sideBarVisible = signal(false);
@@ -2568,7 +2578,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (this.flashCells().has(`${node.id}:${col.colId}`)) out['gg-flash'] = true;
     const matchKeys = this.findMatchKeys();
     if (matchKeys.size > 0) {
-      const colIndex = this.renderColumns().findIndex((c) => c.colId === col.colId);
+      const colIndex = this.colIdToIndex().get(col.colId) ?? -1;
       if (colIndex >= 0 && matchKeys.has(`${node.id}:${colIndex}`)) {
         out[FIND_HIGHLIGHT_CLASS] = true;
         const cur = this.findMatches()[this.findIndex()];
