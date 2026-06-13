@@ -1171,13 +1171,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       'position:absolute;left:-99999px;top:0;visibility:hidden;display:inline-block;' +
       'white-space:nowrap;padding:0;border:0;margin:0;pointer-events:none;';
     host.appendChild(probe);
-    const measureNatural = (el: Element | null): number => {
-      if (!el) return 0;
-      probe.replaceChildren(el.cloneNode(true));
-      const w = probe.scrollWidth;
-      probe.replaceChildren();
-      return w;
-    };
     const headerWidth = new Map<string, number>();
     const cellWidth = new Map<string, number>();
     let hasBodyCells = false;
@@ -1189,11 +1182,27 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       if (!Number.isFinite(w) || w <= 0) return;
       cellWidth.set(colId, Math.max(cellWidth.get(colId) ?? 0, w));
     };
+    // Three-phase batch measurement — eliminates every interleaved read/write cycle.
+    // Phase A (pure reads): drain ALL getComputedStyle calls from live DOM before
+    //   touching the probe. Zero probe mutations happen here.
+    // Phase B (pure writes): append every cloned slot to the probe. Zero layout
+    //   reads happen here. All DOM mutations are batched into one pass.
+    // Phase C (pure reads): read scrollWidth from every slot. The first access
+    //   triggers ONE reflow that serves all subsequent reads from the browser cache.
     try {
-      // Headers: sum every visible child's natural width (label, sort indicator,
-      // filter button, checkbox) + flex gaps + the cell's own padding. The
-      // resize handle is absolutely positioned so it doesn't contribute.
+      // ── Phase A — pure reads: collect computed style metadata, build specs ──
+      // Headers: parse padding + gap + filter visible children. No probe writes.
       const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
+
+      interface HeaderSpec {
+        colId: string;
+        padding: number;
+        gap: number;
+        children: HTMLElement[];
+        slots: HTMLDivElement[];
+      }
+      const headerSpecs: HeaderSpec[] = [];
+
       headerCells.forEach((hc) => {
         const idx = Number(hc.getAttribute('aria-colindex'));
         const colId = colByAriaIndex.get(idx);
@@ -1201,22 +1210,30 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         const cs = getComputedStyle(hc);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
+        // getComputedStyle(c) here is still Phase A — probe has not been written yet.
         const children = Array.from(hc.children).filter(
           (c): c is HTMLElement =>
             c instanceof HTMLElement &&
             !c.classList.contains('gg-resize-handle') &&
             getComputedStyle(c).display !== 'none',
         );
-        let sum = 0;
-        for (const child of children) sum += measureNatural(child);
-        const total = sum + Math.max(0, children.length - 1) * gap + padding;
-        considerHeader(colId, total + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+        headerSpecs.push({ colId, padding, gap, children, slots: [] });
       });
+
       // Body cells — measure whatever the consumer rendered (text, renderer
       // HTML, or component output). For component outputs, the cell's direct
       // child is the component's host element; clone that.
       const bodyCells = host.querySelectorAll<HTMLElement>('.gg-body .gg-cell[aria-colindex]');
       hasBodyCells = bodyCells.length > 0;
+
+      interface CellSpec {
+        colId: string;
+        padding: number;
+        inner: HTMLElement | null;
+        slot: HTMLDivElement | null;
+      }
+      const cellSpecs: CellSpec[] = [];
+
       bodyCells.forEach((cell) => {
         const idx = Number(cell.getAttribute('aria-colindex'));
         const colId = colByAriaIndex.get(idx);
@@ -1227,9 +1244,45 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         const inner =
           cell.querySelector<HTMLElement>(':scope > .gg-cell-renderer, :scope > .gg-cell-text') ??
           (cell.firstElementChild as HTMLElement | null);
-        const w = measureNatural(inner);
-        considerCell(colId, w + padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+        cellSpecs.push({ colId, padding, inner, slot: null });
       });
+
+      // ── Phase B — pure writes: clone all elements into the probe, no reads ──
+      for (const spec of headerSpecs) {
+        for (const child of spec.children) {
+          const slot = document.createElement('div');
+          slot.style.cssText =
+            'position:absolute;top:0;left:0;display:inline-block;' +
+            'white-space:nowrap;padding:0;border:0;margin:0;';
+          slot.appendChild(child.cloneNode(true));
+          spec.slots.push(slot);
+          probe.appendChild(slot);
+        }
+      }
+      for (const spec of cellSpecs) {
+        if (!spec.inner) continue;
+        const slot = document.createElement('div');
+        slot.style.cssText =
+          'position:absolute;top:0;left:0;display:inline-block;' +
+          'white-space:nowrap;padding:0;border:0;margin:0;';
+        slot.appendChild(spec.inner.cloneNode(true));
+        spec.slot = slot;
+        probe.appendChild(slot);
+      }
+
+      // ── Phase C — pure reads: ONE reflow serves every scrollWidth read ──
+      for (const spec of headerSpecs) {
+        if (!spec.slots.length) continue;
+        let sum = 0;
+        for (const slot of spec.slots) sum += slot.scrollWidth;
+        const total = sum + Math.max(0, spec.slots.length - 1) * spec.gap + spec.padding;
+        considerHeader(spec.colId, total + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+      }
+      for (const spec of cellSpecs) {
+        if (!spec.slot) continue;
+        const w = spec.slot.scrollWidth;
+        considerCell(spec.colId, w + spec.padding + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+      }
     } finally {
       probe.remove();
     }
