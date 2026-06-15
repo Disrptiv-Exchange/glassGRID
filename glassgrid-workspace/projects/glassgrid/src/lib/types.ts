@@ -246,9 +246,21 @@ export type FilterOp =
   | 'before' | 'after';
 
 export interface FilterModelItem {
+  /**
+   * ag-grid–compatible filter discriminator. Set on every emitted filter
+   * model item so consumers can branch on column type without re-deriving
+   * it from the colDef. Maps to ag-grid's `filterType`.
+   */
+  filterType?: 'text' | 'number' | 'date' | 'set';
   type: FilterOp;
+  /** Primary value. For dates, prefer `dateFrom`/`dateTo` (ag-grid convention). */
   filter?: string | number | null;
+  /** Upper bound for `inRange` on text/number. */
   filterTo?: string | number | null;
+  /** ag-grid date-filter primary value (ISO `YYYY-MM-DD HH:mm:ss` or `YYYY-MM-DD`). */
+  dateFrom?: string | null;
+  /** ag-grid date-filter upper bound for `inRange`. */
+  dateTo?: string | null;
 }
 
 export interface FilterParams<TRow = unknown, TValue = unknown> {

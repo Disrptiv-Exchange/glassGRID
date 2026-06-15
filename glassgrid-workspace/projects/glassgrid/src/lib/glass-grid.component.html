@@ -216,7 +216,7 @@
                 />
               } @else {
                 <input
-                  type="text"
+                  [type]="filterTypeFor(col) === 'date' ? 'date' : filterTypeFor(col) === 'number' ? 'number' : 'text'"
                   class="gg-floating-filter-input"
                   [value]="floatingFilterValue(col)"
                   (input)="onFloatingFilterInput(col, $any($event.target).value)"
@@ -617,7 +617,7 @@
       </label>
       <label class="gg-filter-row">
         <input
-          [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
+          [type]="filterTypeFor(filterCol) === 'date' ? 'date' : filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
           [ngModel]="draftFilter().filter"
           (ngModelChange)="setDraftFilterValue($event)"
           placeholder="value"
@@ -626,7 +626,7 @@
       @if (draftFilter().type === 'inRange') {
         <label class="gg-filter-row">
           <input
-            [type]="filterCol.colDef.filter === 'number' ? 'number' : filterCol.colDef.filter === 'date' ? 'date' : 'text'"
+            [type]="filterTypeFor(filterCol) === 'date' ? 'date' : filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
             [ngModel]="draftFilter().filterTo"
             (ngModelChange)="setDraftFilterTo($event)"
             placeholder="to"

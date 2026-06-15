@@ -1513,11 +1513,38 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   applyDraftFilter(col: ResolvedColumn<TRow>) {
     const item = this.draftFilter();
     const m = { ...this.filterModel() };
-    if (item.filter == null || item.filter === '') {
-      if (item.type !== 'blank' && item.type !== 'notBlank') {
-        delete m[col.colId];
-      } else { m[col.colId] = item; }
-    } else { m[col.colId] = item; }
+    const ft = resolveFilterType(col.colDef.filter);
+
+    const isBlankOp = item.type === 'blank' || item.type === 'notBlank';
+    const hasValue = item.filter != null && item.filter !== '';
+
+    if (!hasValue && !isBlankOp) {
+      delete m[col.colId];
+    } else {
+      let normalised: import('./types').FilterModelItem;
+      if (ft === 'date') {
+        normalised = {
+          filterType: 'date',
+          type: item.type,
+          dateFrom: item.filter == null ? null : String(item.filter),
+          dateTo: item.type === 'inRange' && item.filterTo != null ? String(item.filterTo) : null,
+        };
+      } else if (ft === 'number') {
+        normalised = {
+          filterType: 'number',
+          type: item.type,
+          filter: item.filter == null ? null : Number(item.filter),
+          filterTo: item.type === 'inRange' && item.filterTo != null ? Number(item.filterTo) : null,
+        };
+      } else {
+        normalised = {
+          filterType: ft ?? 'text',
+          type: item.type,
+          filter: item.filter ?? null,
+        };
+      }
+      m[col.colId] = normalised;
+    }
     this.filterModel.set(m);
     this.openFilterColId.set(null);
     this.currentPage.set(0);
@@ -1624,10 +1651,25 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     } else {
       const ft = resolveFilterType(col.colDef.filter);
       if (ft === 'date') {
-        m[col.colId] = { filterType: 'date', type: type as import('./types').FilterOp, dateFrom: String(value) } as never;
+        // Accept either a primitive ISO string or an object `{ from, to }`
+        let dateFrom: string | null = null;
+        let dateTo: string | null = null;
+        if (typeof value === 'object' && value !== null && ('from' in value || 'to' in value)) {
+          const v = value as { from?: unknown; to?: unknown };
+          dateFrom = v.from == null ? null : String(v.from);
+          dateTo = v.to == null ? null : String(v.to);
+        } else {
+          dateFrom = String(value);
+        }
+        m[col.colId] = {
+          filterType: 'date',
+          type: type as import('./types').FilterOp,
+          dateFrom,
+          dateTo,
+        };
       } else {
         const coerced = ft === 'number' ? Number(value) : (value as string | number);
-        m[col.colId] = { type: type as import('./types').FilterOp, filter: coerced };
+        m[col.colId] = { filterType: ft ?? 'text', type: type as import('./types').FilterOp, filter: coerced };
       }
     }
     this.filterModel.set(m);
@@ -1638,7 +1680,9 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const v = this.filterModel()[col.colId];
     if (!v) return '';
     const item = Array.isArray(v) ? v[0]! : v;
-    return item?.filter == null ? '' : String(item.filter);
+    // For date items, prefer dateFrom (ag-grid shape); fall back to filter.
+    const raw = item?.dateFrom ?? item?.filter;
+    return raw == null ? '' : String(raw);
   }
   /**
    * Pending debounce timers for floating-filter inputs, keyed by colId. Each
@@ -1683,9 +1727,14 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     this.floatingFilterPending.delete(col.colId);
     const m = { ...this.filterModel() };
     const ft = resolveFilterType(col.colDef.filter);
-    const t = ft === 'number' || ft === 'date' ? 'equals' : 'contains';
-    if (value.trim() === '') delete m[col.colId];
-    else m[col.colId] = { type: t, filter: ft === 'number' ? +value : value };
+    if (value.trim() === '') {
+      delete m[col.colId];
+    } else if (ft === 'date') {
+      m[col.colId] = { filterType: 'date', type: 'equals', dateFrom: value };
+    } else {
+      const t = ft === 'number' ? 'equals' : 'contains';
+      m[col.colId] = { filterType: ft ?? 'text', type: t, filter: ft === 'number' ? +value : value };
+    }
     this.filterModel.set(m);
     this.currentPage.set(0);
   }

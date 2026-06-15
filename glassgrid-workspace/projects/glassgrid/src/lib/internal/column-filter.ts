@@ -63,8 +63,10 @@ function matchNumber(value: unknown, item: FilterModelItem): boolean {
 
 function matchDate(value: unknown, item: FilterModelItem): boolean {
   const v = asDate(value);
-  const f = asDate(item.filter);
-  const f2 = asDate(item.filterTo);
+  // Prefer ag-grid-shaped dateFrom/dateTo; fall back to filter/filterTo for
+  // backwards compatibility with items written before this fix was applied.
+  const f = asDate(item.dateFrom ?? item.filter);
+  const f2 = asDate(item.dateTo ?? item.filterTo);
   if (item.type === 'blank') return v == null;
   if (item.type === 'notBlank') return v != null;
   if (v == null || f == null) return false;
