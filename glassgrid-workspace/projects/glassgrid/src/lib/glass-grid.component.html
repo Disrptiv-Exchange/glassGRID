@@ -616,21 +616,43 @@
         </select>
       </label>
       <label class="gg-filter-row">
-        <input
-          [type]="filterTypeFor(filterCol) === 'date' ? 'date' : filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
-          [ngModel]="draftFilter().filter"
-          (ngModelChange)="setDraftFilterValue($event)"
-          placeholder="value"
-        />
+        @if (filterTypeFor(filterCol) === 'date') {
+          <input
+            type="text"
+            inputmode="numeric"
+            maxlength="10"
+            placeholder="dd/mm/yyyy"
+            [value]="formatIsoAsDdMmYyyy(draftFilter().filter)"
+            (change)="setDraftFilterValue(parseDdMmYyyy($any($event.target).value))"
+          />
+        } @else {
+          <input
+            [type]="filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
+            [ngModel]="draftFilter().filter"
+            (ngModelChange)="setDraftFilterValue($event)"
+            placeholder="value"
+          />
+        }
       </label>
       @if (draftFilter().type === 'inRange') {
         <label class="gg-filter-row">
-          <input
-            [type]="filterTypeFor(filterCol) === 'date' ? 'date' : filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
-            [ngModel]="draftFilter().filterTo"
-            (ngModelChange)="setDraftFilterTo($event)"
-            placeholder="to"
-          />
+          @if (filterTypeFor(filterCol) === 'date') {
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="10"
+              placeholder="to (dd/mm/yyyy)"
+              [value]="formatIsoAsDdMmYyyy(draftFilter().filterTo)"
+              (change)="setDraftFilterTo(parseDdMmYyyy($any($event.target).value))"
+            />
+          } @else {
+            <input
+              [type]="filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
+              [ngModel]="draftFilter().filterTo"
+              (ngModelChange)="setDraftFilterTo($event)"
+              placeholder="to"
+            />
+          }
         </label>
       }
       <div class="gg-filter-actions">

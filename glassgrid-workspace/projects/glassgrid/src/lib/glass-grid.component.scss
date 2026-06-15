@@ -119,6 +119,32 @@
   outline: none;
 }
 
+// Hide the native ::-webkit-clear-button on glassgrid date inputs so it doesn't
+// overlap the ::-webkit-calendar-picker-indicator. The clear UX is already
+// covered by the column filter chip and the popup's Clear button.
+:host .gg-floating-filter-input[type="date"]::-webkit-clear-button,
+:host .gg-floating-filter-input[type="date"]::-webkit-inner-spin-button,
+:host .gg-filter-popup input[type="date"]::-webkit-clear-button,
+:host .gg-filter-popup input[type="date"]::-webkit-inner-spin-button {
+  display: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+:host .gg-floating-filter-input[type="date"]::-webkit-calendar-picker-indicator,
+:host .gg-filter-popup input[type="date"]::-webkit-calendar-picker-indicator {
+  margin-left: 6px;
+  padding-right: 2px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 120ms;
+}
+
+:host .gg-floating-filter-input[type="date"]:hover::-webkit-calendar-picker-indicator,
+:host .gg-filter-popup input[type="date"]:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
 :host .gg-toolbar,
 :host .gg-pagination,
 :host .gg-status-bar {

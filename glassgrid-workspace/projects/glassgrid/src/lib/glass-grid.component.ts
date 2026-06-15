@@ -1680,9 +1680,35 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const v = this.filterModel()[col.colId];
     if (!v) return '';
     const item = Array.isArray(v) ? v[0]! : v;
-    // For date items, prefer dateFrom (ag-grid shape); fall back to filter.
-    const raw = item?.dateFrom ?? item?.filter;
-    return raw == null ? '' : String(raw);
+    if (!item) return '';
+    // Range filters can't be edited in a single-input row — keep it blank so
+    // the user knows to open the advanced popup to inspect / change the range.
+    if (item.type === 'inRange') return '';
+    // Date filters store the value in `dateFrom` (ag-grid shape). Fall back to
+    // `filter` for older models persisted before v0.4.57.
+    if (item.filterType === 'date') {
+      return item.dateFrom == null ? '' : String(item.dateFrom);
+    }
+    return item.filter == null ? '' : String(item.filter);
+  }
+
+  /** Parse a DD/MM/YYYY (or D/M/YYYY) string into ISO YYYY-MM-DD. Returns '' for invalid input. */
+  parseDdMmYyyy(input: string): string {
+    if (!input) return '';
+    const m = String(input).trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+    if (!m) return '';
+    const d = +m[1], mo = +m[2], y = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+    return `${y.toString().padStart(4, '0')}-${mo.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
+  }
+
+  /** Format an ISO YYYY-MM-DD into DD/MM/YYYY for display in the popup text inputs. */
+  formatIsoAsDdMmYyyy(iso: string | number | null | undefined): string {
+    if (iso == null || iso === '') return '';
+    const s = String(iso);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return s; // not ISO — leave as-is
+    return `${m[3]}/${m[2]}/${m[1]}`;
   }
   /**
    * Pending debounce timers for floating-filter inputs, keyed by colId. Each
