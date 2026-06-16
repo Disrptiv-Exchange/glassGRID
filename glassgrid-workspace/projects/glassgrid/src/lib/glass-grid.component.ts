@@ -1099,10 +1099,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       });
     });
 
-    // Auto-fit columns whose width was not specified by the consumer.
-    // Columns with an explicit `width` or a `flex` are skipped — explicit
-    // widths are honoured exactly (header / cell ellipsis-truncate if the
-    // declared width is too small).
+    // Auto-fit pass — every column's width is widened to max(headerTextWidth,
+    // widestCellTextWidth) + padding so neither the header label nor the cell
+    // content ever ellipsis-truncates. The declared `width:` (per-column or via
+    // defaultColDef) is honoured as a floor via the widen-only branch below:
+    // columns never shrink below the declared width, but they CAN grow to fit
+    // content. `flex` columns are managed by the layout engine and stay out.
+    //
+    // This is a deliberate deviation from ag-grid's "honour declared width
+    // exactly". Per the spec, header truncation is always treated as a bug —
+    // consumers cap with `maxWidth:` (or the per-column `suppressSizeToFit` /
+    // an explicit pixel-equal width:+maxWidth combo) when they need a hard cap.
     //
     // The effect re-fires when rowData OR columnDefs change. That matters for
     // infinite / server-side row models where data arrives after mount: the
@@ -1125,7 +1132,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         const state = new Map(this.internalColumnState());
         let changed = false;
         for (const c of cols) {
-          if (c.widthExplicit) continue;
           if (c.flex) continue;
           if (this.autoFitFinalized.has(c.colId)) continue;
           const w = this.computeAutoWidth(c);
@@ -1188,8 +1194,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // for infinite / server-side row models: the first probe may run before
     // any body cells exist (header-only measurement) and must NOT lock the
     // column — we let the datasource resolve and re-probe with real cells.
+    // All non-flex, non-finalized columns are probed — declared widths still act
+    // as floors via the widen-only branch in the result-application loop below.
     const autoFitCandidates = cols.filter((c) =>
-      !c.widthExplicit && !c.flex && !this.autoFitFinalized.has(c.colId),
+      !c.flex && !this.autoFitFinalized.has(c.colId),
     );
     if (!autoFitCandidates.length) return;
     const renderedCols = this.renderedColumns();
