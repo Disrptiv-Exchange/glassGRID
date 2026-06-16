@@ -842,6 +842,10 @@ export interface GridApi<TRow = unknown> {
   paginationGetCurrentPage(): number;
   paginationGetTotalPages(): number;
   paginationGetPageSize(): number;
+  /** Filtered row count (mirrors ag-grid's gridApi.paginationGetRowCount()). */
+  paginationGetRowCount(): number;
+  /** Unfiltered total row count — useful for "filtered from N" displays. Not in ag-grid; glassgrid-specific. */
+  paginationGetTotalRowCount(): number;
   paginationSetPageSize(size: number): void;
 
   // misc

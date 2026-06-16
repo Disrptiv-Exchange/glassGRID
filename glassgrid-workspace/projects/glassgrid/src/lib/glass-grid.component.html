@@ -543,7 +543,10 @@
         <span class="gg-page-info" aria-live="polite">
           {{ t()('page') }} {{ api.paginationGetCurrentPage() + 1 }} {{ t()('of') }} {{ api.paginationGetTotalPages() }}
           ·
-          {{ totalDisplayed() }} {{ t()('rows') }}
+          {{ pageRowStart() }} {{ t()('to') }} {{ pageRowEnd() }} {{ t()('of') }} {{ filteredRowCount() }} {{ t()('rows') }}
+          @if (isGridFiltered()) {
+            <span class="gg-page-info-filtered">({{ t()('filteredFrom') }} {{ totalRows() }})</span>
+          }
         </span>
         <button type="button" class="gg-page-btn" (click)="paginationFirst()" [disabled]="api.paginationGetCurrentPage() === 0" [attr.aria-label]="t()('firstPage')">«</button>
         <button type="button" class="gg-page-btn" (click)="paginationPrev()" [disabled]="api.paginationGetCurrentPage() === 0" [attr.aria-label]="t()('prevPage')">‹</button>

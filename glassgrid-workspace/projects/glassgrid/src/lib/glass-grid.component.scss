@@ -1111,6 +1111,7 @@
   color: var(--gg-muted-fg); font-size: 12px;
 }
 .gg-page-info { margin-right: auto; font-variant-numeric: tabular-nums; }
+.gg-page-info-filtered { margin-left: 6px; color: var(--gg-muted-fg, #767676); font-style: italic; }
 .gg-page-size select {
   margin-left: 6px; padding: 2px 6px;
   border: 1px solid var(--gg-border); border-radius: 4px;

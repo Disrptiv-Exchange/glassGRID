@@ -788,6 +788,39 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   readonly totalDisplayed = computed(() => this.displayedRows().length);
 
+  /** Raw row count BEFORE filter — same denominator ag-grid uses for "filtered from N". */
+  readonly totalRows = computed(() => {
+    const local = this.localRowData();
+    const data = local ?? this.rowData() ?? [];
+    return data.length;
+  });
+
+  /** Filtered row count (excluding pinned rows). Equals totalRows when no filter applied. */
+  readonly filteredRowCount = computed(() => this.displayedRows().filter((r) => !r.pinned).length);
+
+  /** True when at least one filter is reducing the row set. Drives "(filtered from N)" suffix. */
+  readonly isGridFiltered = computed(() => this.filteredRowCount() < this.totalRows());
+
+  /** 1-based index of the first row on the current page (after pinned-row + filter resolution). */
+  readonly pageRowStart = computed(() => {
+    if (!this.pagination()) return this.filteredRowCount() === 0 ? 0 : 1;
+    const total = this.filteredRowCount();
+    if (total === 0) return 0;
+    const size = this.effectivePageSize();
+    const page = Math.min(this.currentPage(), this.totalPages() - 1);
+    return page * size + 1;
+  });
+
+  /** 1-based index of the last row on the current page. */
+  readonly pageRowEnd = computed(() => {
+    const total = this.filteredRowCount();
+    if (total === 0) return 0;
+    if (!this.pagination()) return total;
+    const size = this.effectivePageSize();
+    const page = Math.min(this.currentPage(), this.totalPages() - 1);
+    return Math.min((page + 1) * size, total);
+  });
+
   readonly effectivePageSize = computed(() => {
     if (!this.pagination()) return this.totalDisplayed();
     if (this.paginationAutoPageSize()) return Math.max(1, Math.floor(this.viewportHeight() / this.rowHeight()));
@@ -3325,6 +3358,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       paginationGetCurrentPage() { return self.currentPage(); },
       paginationGetTotalPages() { return self.totalPages(); },
       paginationGetPageSize() { return self.effectivePageSize(); },
+      paginationGetRowCount() { return self.filteredRowCount(); },
+      paginationGetTotalRowCount() { return self.totalRows(); },
       paginationSetPageSize(size) { self.userPageSize.set(size); self.currentPage.set(0); },
 
       ensureIndexVisible(index, position = 'top') {
