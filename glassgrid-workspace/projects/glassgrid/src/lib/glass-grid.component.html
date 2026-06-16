@@ -618,12 +618,17 @@
       <label class="gg-filter-row">
         @if (filterTypeFor(filterCol) === 'date') {
           <input
+            #ddFromInput
             type="text"
+            class="gg-date-text"
             inputmode="numeric"
             maxlength="10"
             placeholder="dd/mm/yyyy"
             [value]="formatIsoAsDdMmYyyy(draftFilter().filter)"
             (change)="setDraftFilterValue(parseDdMmYyyy($any($event.target).value))"
+            (click)="pickPopupDateFrom(ddFromInput)"
+            (focus)="pickPopupDateFrom(ddFromInput)"
+            readonly
           />
         } @else {
           <input
@@ -638,12 +643,17 @@
         <label class="gg-filter-row">
           @if (filterTypeFor(filterCol) === 'date') {
             <input
+              #ddToInput
               type="text"
+              class="gg-date-text"
               inputmode="numeric"
               maxlength="10"
-              placeholder="to (dd/mm/yyyy)"
+              placeholder="dd/mm/yyyy"
               [value]="formatIsoAsDdMmYyyy(draftFilter().filterTo)"
               (change)="setDraftFilterTo(parseDdMmYyyy($any($event.target).value))"
+              (click)="pickPopupDateTo(ddToInput)"
+              (focus)="pickPopupDateTo(ddToInput)"
+              readonly
             />
           } @else {
             <input

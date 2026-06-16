@@ -6,8 +6,11 @@ export interface ResolvedColumn<TRow = unknown> {
   field: string | undefined;
   headerName: string;
   width: number;
-  /** True iff the consumer set `width` on the ColumnDef (or via defaultColDef).
-   *  When false, the grid auto-fits this column to its content on first data load. */
+  /** True iff the consumer set `width` directly on this per-column ColumnDef
+   *  (NOT inherited from defaultColDef). `defaultColDef.width` is treated as an
+   *  initial value only — the auto-fit pass is still free to widen the column to
+   *  fit header + cell content. Matches ag-grid: `defaultColDef.width` is a
+   *  default, not a lock; only a per-column `width:` is honoured as explicit. */
   widthExplicit: boolean;
   minWidth: number;
   maxWidth: number | undefined;
@@ -55,7 +58,7 @@ export function resolveColumns<TRow>(
       field: merged.field,
       headerName: merged.headerName ?? prettify(merged.field ?? colId),
       width: merged.width ?? DEFAULTS.width,
-      widthExplicit: merged.width !== undefined,
+      widthExplicit: d.width !== undefined,
       minWidth: merged.minWidth ?? DEFAULTS.minWidth,
       maxWidth: merged.maxWidth,
       flex: merged.flex,

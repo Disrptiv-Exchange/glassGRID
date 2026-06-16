@@ -1680,21 +1680,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const v = this.filterModel()[col.colId];
     if (!v) return '';
     const item = Array.isArray(v) ? v[0]! : v;
-    if (!item) return '';
-    // Range filters can't be edited in a single-input row — keep it blank so
-    // the user knows to open the advanced popup to inspect / change the range.
-    if (item.type === 'inRange') return '';
-    // Date filters store the value in `dateFrom` (ag-grid shape). Fall back to
-    // `filter` for older models persisted before v0.4.57.
-    if (item.filterType === 'date') {
-      return item.dateFrom == null ? '' : String(item.dateFrom);
-    }
-    return item.filter == null ? '' : String(item.filter);
+    // For inRange (two-bound) date filters, the single floating filter input
+    // can't represent both ends — show blank so the user isn't misled into
+    // thinking only the start date is the active filter.
+    if (item?.type === 'inRange') return '';
+    const raw = item?.dateFrom ?? item?.filter;
+    return raw == null ? '' : String(raw);
   }
 
   /** Parse a DD/MM/YYYY (or D/M/YYYY) string into ISO YYYY-MM-DD. Returns '' for invalid input. */
-  parseDdMmYyyy(input: string): string {
-    if (!input) return '';
+  parseDdMmYyyy(input: string | null | undefined): string {
+    if (input == null || input === '') return '';
     const m = String(input).trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
     if (!m) return '';
     const d = +m[1], mo = +m[2], y = +m[3];
@@ -1702,14 +1698,66 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     return `${y.toString().padStart(4, '0')}-${mo.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
   }
 
-  /** Format an ISO YYYY-MM-DD into DD/MM/YYYY for display in the popup text inputs. */
+  /** Format an ISO YYYY-MM-DD into DD/MM/YYYY for display. */
   formatIsoAsDdMmYyyy(iso: string | number | null | undefined): string {
     if (iso == null || iso === '') return '';
     const s = String(iso);
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!m) return s; // not ISO — leave as-is
+    if (!m) return s;
     return `${m[3]}/${m[2]}/${m[1]}`;
   }
+
+  /**
+   * Open the browser's native date picker by creating a transient
+   * <input type="date"> sibling, seeding it with the current ISO value, and
+   * invoking showPicker() (falling back to click). The picked ISO value is
+   * pushed back through `onPicked` so the visible text input — bound by
+   * [value] — re-renders as DD/MM/YYYY.
+   *
+   * The transient input is invisible and removed after change/blur, so users
+   * see a single seamless text input that opens the native calendar on click.
+   */
+  private datePickerLock = false;
+  openDatePickerFor(textInput: HTMLInputElement, onPicked: (iso: string) => void): void {
+    if (this.datePickerLock) return;
+    this.datePickerLock = true;
+    const seedIso = this.parseDdMmYyyy(textInput.value);
+    const picker = document.createElement('input');
+    picker.type = 'date';
+    picker.style.position = 'fixed';
+    picker.style.opacity = '0';
+    picker.style.pointerEvents = 'none';
+    const rect = textInput.getBoundingClientRect();
+    picker.style.left = rect.left + 'px';
+    picker.style.top = rect.top + 'px';
+    picker.style.width = rect.width + 'px';
+    picker.style.height = rect.height + 'px';
+    if (seedIso) picker.value = seedIso;
+    document.body.appendChild(picker);
+    const cleanup = () => {
+      try { document.body.removeChild(picker); } catch { /* already gone */ }
+      this.datePickerLock = false;
+    };
+    picker.addEventListener('change', () => { onPicked(picker.value || ''); cleanup(); }, { once: true });
+    picker.addEventListener('blur', () => setTimeout(cleanup, 200), { once: true });
+    const sp = (picker as unknown as { showPicker?: () => void }).showPicker;
+    if (typeof sp === 'function') {
+      try { sp.call(picker); return; } catch { /* fall through */ }
+    }
+    picker.focus();
+    picker.click();
+  }
+
+  /** Template-friendly wrapper used by the popup's primary date input. */
+  pickPopupDateFrom(textInput: HTMLInputElement): void {
+    this.openDatePickerFor(textInput, (iso) => this.setDraftFilterValue(iso));
+  }
+
+  /** Template-friendly wrapper used by the popup's "to" date input in inRange mode. */
+  pickPopupDateTo(textInput: HTMLInputElement): void {
+    this.openDatePickerFor(textInput, (iso) => this.setDraftFilterTo(iso));
+  }
+
   /**
    * Pending debounce timers for floating-filter inputs, keyed by colId. Each
    * entry remembers the latest typed value so blur / Enter can flush the
