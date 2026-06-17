@@ -188,6 +188,15 @@
   display: block;
   width: 100%;
 }
+// Force the visible text input to fill the wrap so it matches the width of
+// the sibling <select> / <input> rows above it. Without this, the input falls
+// back to the browser's intrinsic <input> width (slightly narrower than the
+// <select> the user sees on the row above), which produces the visual
+// "input is 40px narrower than dropdown" UI nit.
+:host .gg-filter-popup .gg-popup-date-wrap input.gg-date-text {
+  width: 100%;
+  box-sizing: border-box;
+}
 :host .gg-filter-popup .gg-popup-date-wrap input.gg-popup-date-picker {
   position: absolute;
   inset: 0;
