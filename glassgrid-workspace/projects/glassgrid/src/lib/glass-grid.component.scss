@@ -175,6 +175,32 @@
   caret-color: transparent;
 }
 
+// Popup date picker wrap: the text input the user sees + the type="date" input
+// the browser anchors the calendar to. The picker is laid out at the SAME box
+// as the text input (via inset:0 on the wrap), so when showPicker() fires,
+// Chromium reads the picker's bounding-box for the calendar anchor and opens
+// the calendar directly beneath the text input. The picker is visually hidden
+// via clip-path (so it doesn't take pixels) but its layout box is preserved
+// (so the anchor calc works). pointer-events:none routes the click to the
+// visible text input, which is bound to ddFrom/ToPicker.showPicker().
+:host .gg-filter-popup .gg-popup-date-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+:host .gg-filter-popup .gg-popup-date-wrap input.gg-popup-date-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  clip-path: inset(50%);
+}
+
 // ---- dark variant (glassRUN dark) ----
 :host(.gg-dark) {
   --gg-bg: #161719;

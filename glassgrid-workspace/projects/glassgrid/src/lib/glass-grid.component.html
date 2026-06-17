@@ -620,19 +620,28 @@
       </label>
       <label class="gg-filter-row">
         @if (filterTypeFor(filterCol) === 'date') {
-          <input
-            #ddFromInput
-            type="text"
-            class="gg-date-text"
-            inputmode="numeric"
-            maxlength="10"
-            placeholder="dd/mm/yyyy"
-            [value]="formatIsoAsDdMmYyyy(draftFilter().filter)"
-            (change)="setDraftFilterValue(parseDdMmYyyy($any($event.target).value))"
-            (click)="pickPopupDateFrom(ddFromInput)"
-            (focus)="pickPopupDateFrom(ddFromInput)"
-            readonly
-          />
+          <span class="gg-popup-date-wrap">
+            <input
+              type="date"
+              class="gg-popup-date-picker"
+              #ddFromPicker
+              [value]="draftFilter().filter || null"
+              (change)="setDraftFilterValue($any($event.target).value)"
+              tabindex="-1"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              class="gg-date-text"
+              inputmode="numeric"
+              maxlength="10"
+              placeholder="dd/mm/yyyy"
+              [value]="formatIsoAsDdMmYyyy(draftFilter().filter)"
+              (change)="setDraftFilterValue(parseDdMmYyyy($any($event.target).value))"
+              (click)="openInlineDatePicker(ddFromPicker)"
+              readonly
+            />
+          </span>
         } @else {
           <input
             [type]="filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
@@ -645,19 +654,28 @@
       @if (draftFilter().type === 'inRange') {
         <label class="gg-filter-row">
           @if (filterTypeFor(filterCol) === 'date') {
-            <input
-              #ddToInput
-              type="text"
-              class="gg-date-text"
-              inputmode="numeric"
-              maxlength="10"
-              placeholder="dd/mm/yyyy"
-              [value]="formatIsoAsDdMmYyyy(draftFilter().filterTo)"
-              (change)="setDraftFilterTo(parseDdMmYyyy($any($event.target).value))"
-              (click)="pickPopupDateTo(ddToInput)"
-              (focus)="pickPopupDateTo(ddToInput)"
-              readonly
-            />
+            <span class="gg-popup-date-wrap">
+              <input
+                type="date"
+                class="gg-popup-date-picker"
+                #ddToPicker
+                [value]="draftFilter().filterTo || null"
+                (change)="setDraftFilterTo($any($event.target).value)"
+                tabindex="-1"
+                aria-hidden="true"
+              />
+              <input
+                type="text"
+                class="gg-date-text"
+                inputmode="numeric"
+                maxlength="10"
+                placeholder="dd/mm/yyyy"
+                [value]="formatIsoAsDdMmYyyy(draftFilter().filterTo)"
+                (change)="setDraftFilterTo(parseDdMmYyyy($any($event.target).value))"
+                (click)="openInlineDatePicker(ddToPicker)"
+                readonly
+              />
+            </span>
           } @else {
             <input
               [type]="filterTypeFor(filterCol) === 'number' ? 'number' : 'text'"
