@@ -1751,12 +1751,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   /**
    * Open the browser's native date picker by creating a transient
    * <input type="date"> sibling, seeding it with the current ISO value, and
-   * invoking showPicker() (falling back to click). The picked ISO value is
-   * pushed back through `onPicked` so the visible text input — bound by
-   * [value] — re-renders as DD/MM/YYYY.
+   * invoking showPicker(). The picked ISO value is pushed back through
+   * `onPicked` so the visible text input — bound by [value] — re-renders as
+   * DD/MM/YYYY.
    *
-   * The transient input is invisible and removed after change/blur, so users
-   * see a single seamless text input that opens the native calendar on click.
+   * Chrome anchors the calendar dropdown to the picker element's bounding box,
+   * but ONLY if the element participates in hit-testing. `opacity: 0` is fine
+   * for the visual side but breaks anchor calculation, which is why earlier
+   * v0.4.61 → v0.4.64 builds opened the calendar at the viewport's top-right
+   * corner instead of next to the text input. We hide the picker via
+   * `clip-path: inset(50%)` + `transform: scale(0.001)` instead — the element
+   * still renders into its positioned box (so anchoring works) but takes up
+   * zero visible pixels.
    */
   private datePickerLock = false;
   openDatePickerFor(textInput: HTMLInputElement, onPicked: (iso: string) => void): void {
@@ -1765,14 +1771,28 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const seedIso = this.parseDdMmYyyy(textInput.value);
     const picker = document.createElement('input');
     picker.type = 'date';
-    picker.style.position = 'fixed';
-    picker.style.opacity = '0';
-    picker.style.pointerEvents = 'none';
     const rect = textInput.getBoundingClientRect();
-    picker.style.left = rect.left + 'px';
-    picker.style.top = rect.top + 'px';
-    picker.style.width = rect.width + 'px';
-    picker.style.height = rect.height + 'px';
+    // Position the picker EXACTLY over the visible text input. Chrome anchors
+    // the calendar dropdown to the picker's bounding box, so this is what
+    // determines where the calendar opens.
+    picker.style.cssText = [
+      'position:fixed',
+      `left:${rect.left}px`,
+      `top:${rect.top}px`,
+      `width:${rect.width}px`,
+      `height:${rect.height}px`,
+      // Keep the picker laid out (so Chrome can anchor) but visually invisible
+      // and non-interactive (the visible text input takes the user click).
+      'clip-path:inset(50%)',
+      'border:0',
+      'padding:0',
+      'margin:0',
+      'background:transparent',
+      'pointer-events:none',
+      // The z-index ensures the picker sits in front of any popup chrome so
+      // showPicker() doesn't get blocked by overlay layering.
+      'z-index:2147483647',
+    ].join(';');
     if (seedIso) picker.value = seedIso;
     document.body.appendChild(picker);
     const cleanup = () => {
@@ -1780,6 +1800,9 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       this.datePickerLock = false;
     };
     picker.addEventListener('change', () => { onPicked(picker.value || ''); cleanup(); }, { once: true });
+    // Some browsers fire `cancel` when the user dismisses the picker without
+    // selecting; clean up so the lock doesn't strand.
+    picker.addEventListener('cancel', cleanup, { once: true });
     picker.addEventListener('blur', () => setTimeout(cleanup, 200), { once: true });
     const sp = (picker as unknown as { showPicker?: () => void }).showPicker;
     if (typeof sp === 'function') {
