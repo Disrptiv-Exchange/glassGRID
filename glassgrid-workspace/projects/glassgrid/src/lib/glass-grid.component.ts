@@ -1521,7 +1521,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     ev.stopPropagation();
     const current = this.filterModel()[col.colId];
     const item = Array.isArray(current) ? current[0]! : (current ?? this.defaultFilterDraft(col));
-    this.draftFilter.set({ ...item });
+    // Denormalise: applyDraftFilter() stores date filters as dateFrom/dateTo,
+    // but the popup template binds to filter/filterTo. Without this copy the
+    // inputs render blank on re-open even though the saved filter is correct
+    // (ag-grid does the same denormalise-on-open).
+    const draft = { ...item };
+    if (resolveFilterType(col.colDef.filter) === 'date') {
+      if (draft.dateFrom != null && draft.filter == null) draft.filter = draft.dateFrom;
+      if (draft.dateTo != null && draft.filterTo == null) draft.filterTo = draft.dateTo;
+    }
+    this.draftFilter.set(draft);
     // Anchor the popup just below the clicked filter button (or its header cell), relative to the grid host.
     const hostRect = this.el.nativeElement.getBoundingClientRect();
     const target = (ev.currentTarget ?? ev.target) as HTMLElement | null;

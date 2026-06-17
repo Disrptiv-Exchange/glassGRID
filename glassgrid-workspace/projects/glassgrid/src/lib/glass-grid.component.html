@@ -214,15 +214,37 @@
                   [ggCurrentFilterItem]="currentFilterItemForColumn(col)"
                   (ggFilterChanged)="onAgFloatingFilterChanged(col, $event.type, $event.value)"
                 />
+              } @else if (filterTypeFor(col) === 'date') {
+                <span class="gg-floating-date-wrap">
+                  <input
+                    type="date"
+                    class="gg-floating-date-picker"
+                    #floatPicker
+                    [value]="floatingFilterValue(col) || null"
+                    (change)="onFloatingFilterInput(col, $any($event.target).value); flushFloatingFilter(col)"
+                    tabindex="-1"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="text"
+                    class="gg-floating-filter-input gg-floating-date-text"
+                    inputmode="numeric"
+                    maxlength="10"
+                    placeholder="dd/mm/yyyy"
+                    [value]="formatIsoAsDdMmYyyy(floatingFilterValue(col))"
+                    (click)="openInlineDatePicker(floatPicker)"
+                    readonly
+                  />
+                </span>
               } @else {
                 <input
-                  [type]="filterTypeFor(col) === 'date' ? 'date' : filterTypeFor(col) === 'number' ? 'number' : 'text'"
+                  [type]="filterTypeFor(col) === 'number' ? 'number' : 'text'"
                   class="gg-floating-filter-input"
                   [value]="floatingFilterValue(col)"
                   (input)="onFloatingFilterInput(col, $any($event.target).value)"
                   (blur)="flushFloatingFilter(col)"
                   (keydown.enter)="flushFloatingFilter(col)"
-                  [placeholder]="filterTypeFor(col) === 'number' ? '#' : filterTypeFor(col) === 'date' ? 'yyyy-mm-dd' : ''"
+                  [placeholder]="filterTypeFor(col) === 'number' ? '#' : ''"
                 />
               }
             }
