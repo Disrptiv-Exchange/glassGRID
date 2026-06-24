@@ -788,15 +788,22 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   readonly totalDisplayed = computed(() => this.displayedRows().length);
 
-  /** Raw row count BEFORE filter — same denominator ag-grid uses for "filtered from N". */
+  /** Raw row count BEFORE filter — same denominator ag-grid uses for "filtered from N".
+   *  For server-side paginated grids we don't know an unfiltered total (server applies
+   *  filters before responding), so we use serverSideTotal — same value as filteredRowCount.
+   *  isGridFiltered will therefore return false for server-side; ag-grid does the same. */
   readonly totalRows = computed(() => {
+    if (this.isServerSidePaginated()) return this.serverSideTotal() ?? 0;
     const local = this.localRowData();
     const data = local ?? this.rowData() ?? [];
     return data.length;
   });
 
   /** Filtered row count (excluding pinned rows). Equals totalRows when no filter applied. */
-  readonly filteredRowCount = computed(() => this.displayedRows().filter((r) => !r.pinned).length);
+  readonly filteredRowCount = computed(() => {
+    if (this.isServerSidePaginated()) return this.serverSideTotal() ?? 0;
+    return this.displayedRows().filter((r) => !r.pinned).length;
+  });
 
   /** True when at least one filter is reducing the row set. Drives "(filtered from N)" suffix. */
   readonly isGridFiltered = computed(() => this.filteredRowCount() < this.totalRows());
@@ -828,7 +835,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   });
 
   readonly totalPages = computed(() => {
-    // Pinned rows are not paginated, so divide only the middle band.
+    if (this.isServerSidePaginated()) {
+      // Server-side: the server's reported total is the authoritative denominator.
+      const total = this.serverSideTotal() ?? 0;
+      return Math.max(1, Math.ceil(total / Math.max(1, this.effectivePageSize())));
+    }
+    // Client-side: pinned rows are not paginated, so divide only the middle band.
     const middle = this.displayedRows().filter((r) => !r.pinned).length;
     return Math.max(1, Math.ceil(middle / Math.max(1, this.effectivePageSize())));
   });
@@ -840,6 +852,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const top = rows.filter((r) => r.pinned === 'top');
     const bottom = rows.filter((r) => r.pinned === 'bottom');
     const middle = rows.filter((r) => !r.pinned);
+    if (this.isServerSidePaginated()) {
+      // Server already returned exactly the current page's slice — no client-side
+      // paging math; just hand back what was loaded.
+      return [...top, ...middle, ...bottom];
+    }
     const size = this.effectivePageSize();
     const page = Math.min(this.currentPage(), this.totalPages() - 1);
     return [...top, ...middle.slice(page * size, page * size + size), ...bottom];
@@ -1082,20 +1099,48 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     });
 
     // datasource attachment effect: when consumer calls gridApi.setGridOption('datasource', ds),
-    // fetch the first block immediately (ag-grid behaviour).
-    // Subscribe to filterModel / sortModel so changes re-trigger this effect — the server
-    // is authoritative for infinite / serverSide / viewport row models, matching ag-grid
-    // semantics. Cache + localRowData are cleared before fetching so the consumer's
+    // fetch the appropriate slice immediately (ag-grid behaviour).
+    //
+    // Two distinct paths, matching ag-grid:
+    //
+    // (A) pagination=true + rowModelType=infinite|serverSide → page-as-block.
+    //     Each page = one server request with startRow = page * pageSize and
+    //     endRow = (page+1) * pageSize. The effect watches currentPage and
+    //     effectivePageSize so every Next/Prev click and every page-size
+    //     change fires exactly one getRows. Always re-fetch (no client cache
+    //     across page revisits) — matches ag-grid's pagination model.
+    //
+    // (B) pagination=false + rowModelType=infinite|serverSide → block-batching.
+    //     Pre-existing behaviour, untouched. cacheBlockSize is the request
+    //     unit; infiniteFetched dedupes already-loaded blocks.
+    //
+    // Subscribe to filterModel / sortModel in both paths so a filter/sort
+    // change re-triggers the fetch — the server is authoritative for these
+    // row models. localRowData is cleared before fetching so the consumer's
     // getRows callback runs against a clean state with the new model.
     effect(() => {
       const ds = this.attachedDatasource();
-      this.filterModel();
-      this.sortModel();
+      const filterModel = this.filterModel();
+      const sortModel = this.sortModel();
+      const isServerPaged = this.isServerSidePaginated();
+      // Read pagination state inside the effect so the effect re-fires when
+      // currentPage or effectivePageSize change. Even if isServerPaged is
+      // false, reading these signals here is cheap (just a signal read) and
+      // keeps the dependency graph consistent.
+      const page = this.currentPage();
+      const size = this.effectivePageSize();
+      void filterModel; void sortModel;
       if (!ds) return;
       untracked(() => {
-        this.infiniteFetched.clear();
-        this.localRowData.set([]);
-        this.fetchInfiniteBlock(0);
+        if (isServerPaged) {
+          // Path (A): fetch exactly one page from the server.
+          this.fetchServerPage(page, size);
+        } else {
+          // Path (B): pre-existing block-batching infinite-scroll path.
+          this.infiniteFetched.clear();
+          this.localRowData.set([]);
+          this.fetchInfiniteBlock(0);
+        }
       });
     });
 
@@ -3596,8 +3641,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         // Match ag-grid's refresh semantics for a consumer-initiated reload:
         // purge every cached block, reset to the first page + top scroll
         // (so a refresh while on page >1 doesn't render an empty slice while
-        // block 0 is in flight), then re-fetch the first block. Selection is
-        // cleared by the caller (RefreshGrid → deselectAll).
+        // block 0 is in flight), then re-fetch.
         //
         // CRITICAL: also clear the in-memory edit overlay. glassgrid keeps
         // committed cell edits in `editedValues` (keyed by row id) and merges
@@ -3606,9 +3650,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         // the whole row. Without clearing here, a refresh re-fetches fresh
         // server rows but RE-APPLIES the old edits on top (same row ids), so
         // edited columns like Shift / Pick Up Date keep showing the last
-        // picked value instead of the server's. The consumer has already
-        // persisted the edit (onCellValueChanged → save → Update button), so
-        // the server response is the source of truth now — drop the overlay.
+        // picked value instead of the server's.
         self.editedValues.set(new Map());
         self.undoStack.length = 0;
         self.redoStack.length = 0;
@@ -3617,7 +3659,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         self.currentPage.set(0);
         const vp = self.viewportRef?.nativeElement;
         if (vp) vp.scrollTop = 0;
-        self.fetchInfiniteBlock(0);
+        if (self.isServerSidePaginated()) {
+          // Path (A): page-as-block. Always fetch page 0 explicitly — even if
+          // currentPage was already 0, the signal write above didn't change
+          // its value, so the datasource effect wouldn't fire. This explicit
+          // call guarantees a fresh getRows on every RefreshGrid().
+          self.fetchServerPage(0, self.effectivePageSize());
+        } else {
+          // Path (B): pre-existing block-batching infinite-scroll path.
+          self.fetchInfiniteBlock(0);
+        }
       },
       purgeInfiniteCache() { self.api.refreshInfiniteCache(); },
       get infiniteRowModel() {
@@ -3633,6 +3684,53 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    * The grid uses this to satisfy ag-grid's infinite row-model pattern:
    *   gridApi.setGridOption('datasource', { getRows(params) { ... params.successCallback(rows, total) } })
    */
+  /**
+   * True iff the grid is wired for server-driven paginated data — i.e. the
+   * row model is infinite or serverSide AND pagination is enabled. Drives the
+   * page-as-block fetch path (one getRows per page) and the corresponding
+   * branches in totalPages / pagedRows / pageRowStart / pageRowEnd /
+   * filteredRowCount / totalRows. When false, pagination falls back to the
+   * client-side row buffer (current and historic behaviour).
+   */
+  readonly isServerSidePaginated = computed(() => {
+    const rm = this.rowModelType();
+    return (rm === 'infinite' || rm === 'serverSide') && this.pagination();
+  });
+
+  /**
+   * Page-as-block server fetch. Issues exactly ONE getRows for the slice
+   * [page * pageSize, (page+1) * pageSize). The response rows replace
+   * localRowData (we hold only the current page's rows — no sparse mega-array
+   * for high page indices). serverSideTotal carries the server's reported
+   * total row count so the pagination strip can render "Page X of Y" /
+   * "A to B of C rows" against the real total, not the loaded slice's length.
+   */
+  fetchServerPage(page: number, size: number) {
+    const ds = this.attachedDatasource();
+    if (!ds) return;
+    const startRow = page * size;
+    const endRow = startRow + size;
+    this.loadingOverlayInternal.set(true);
+    ds.getRows({
+      startRow,
+      endRow,
+      sortModel: this.sortModel(),
+      filterModel: this.filterModel(),
+      successCallback: (rows: TRow[], lastRow?: number) => {
+        // Replace the row buffer with just this page's rows. Pagination
+        // bookkeeping (totalPages / pageRowStart / End) reads serverSideTotal
+        // for the real numerator/denominator, not localRowData.length.
+        this.localRowData.set(rows.slice());
+        if (typeof lastRow === 'number') this.serverSideTotal.set(lastRow);
+        this.loadingOverlayInternal.set(false);
+        if (this.debug()) console.log('[glassGRID] server page loaded', { page, size, startRow, endRow, rows: rows.length, lastRow });
+      },
+      failCallback: () => {
+        this.loadingOverlayInternal.set(false);
+      },
+    });
+  }
+
   fetchInfiniteBlock(blockIndex: number) {
     const ds = this.attachedDatasource();
     if (!ds) return;
