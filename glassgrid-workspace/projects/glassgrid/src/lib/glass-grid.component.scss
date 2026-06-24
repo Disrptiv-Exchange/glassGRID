@@ -430,6 +430,35 @@
   position: relative;
 }
 .gg-header-cells { display: flex; flex: 0 0 auto; }
+
+/* ---- horizontal-scroll tracking (v0.4.70) ----
+ *
+ * The grid body scrolls natively (browser-driven). The main column header,
+ * the floating-filter row, and any pinned-left header / filter cells must
+ * stay perfectly locked to the body during scroll — including fast drag-
+ * scroll where one CD cycle's worth of frame lag is visible as a header
+ * "shake" before snapping back into alignment.
+ *
+ * Previously these elements bound `[style.transform]="translateX(-scrollLeft())"`
+ * via a signal — Angular's CD scheduled the DOM write a frame after the body
+ * had already scrolled, producing the shake. The fix is to write the offset
+ * SYNCHRONOUSLY in the scroll handler as the `--gg-scroll-x` custom property
+ * on the host (see GlassGridComponent.onBodyScroll), then drive these
+ * transforms from CSS — the browser applies them in the same paint frame
+ * as the scroll, with no JS round-trip.
+ *
+ * Group header rows (.gg-header-groups > .gg-header-cells) are intentionally
+ * excluded — they did not track horizontal scroll before this refactor and
+ * preserving that behaviour avoids a drive-by change. */
+:host .gg-header:not(.gg-header-groups) > .gg-header-cells,
+:host .gg-floating-filter-row {
+  transform: translateX(calc(-1 * var(--gg-scroll-x, 0px)));
+  will-change: transform;
+}
+:host .gg-header-cell.gg-pinned-left,
+:host .gg-floating-filter-cell.gg-pinned-left {
+  transform: translateX(var(--gg-scroll-x, 0px));
+}
 .gg-header-cell {
   display: flex;
   align-items: center;

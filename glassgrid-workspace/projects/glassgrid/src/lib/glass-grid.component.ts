@@ -1366,6 +1366,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   @HostListener('window:resize') onWindowResize() { this.measureViewport(); }
   ngAfterViewInit() {
     this.measureViewport();
+    // Seed --gg-scroll-x so header / floating-filter / pinned-left transforms
+    // resolve to translateX(0) before the first scroll event arrives. Without
+    // this seed, calc(-1 * var(--gg-scroll-x, 0px)) still falls back to 0px,
+    // but the explicit set keeps the property visible in DevTools and is a
+    // one-line guarantee against any future CSS that omits the fallback.
+    const host = this.el?.nativeElement as HTMLElement | undefined;
+    if (host) host.style.setProperty('--gg-scroll-x', '0px');
     // Track host/parent resize too — window:resize alone misses layout changes
     // like sidebar toggle or flex-container reflow, which leave fitGridWidth
     // out of date and produce empty whitespace on the right.
@@ -1392,6 +1399,16 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
   onBodyScroll(ev: Event) {
     const el = ev.target as HTMLDivElement;
+    // Write the horizontal scroll offset SYNCHRONOUSLY as a CSS custom
+    // property on the host BEFORE Angular's signal-driven change detection
+    // runs. The header, floating-filter row, and pinned-left cells consume
+    // --gg-scroll-x via plain CSS transforms (see glass-grid.component.scss),
+    // so they reflow in the same paint frame as the natively-scrolling body.
+    // Without this, [style.transform]="…scrollLeft()…" bindings trailed the
+    // native body scroll by one CD cycle, producing a visible header shake
+    // during fast drag-scroll.
+    const host = this.el?.nativeElement as HTMLElement | undefined;
+    if (host) host.style.setProperty('--gg-scroll-x', el.scrollLeft + 'px');
     this.scrollTop.set(el.scrollTop);
     this.scrollLeft.set(el.scrollLeft);
     this.bodyScroll.emit({ top: el.scrollTop, left: el.scrollLeft });

@@ -112,7 +112,6 @@
     >
       <div class="gg-header-cells"
            [style.width.px]="totalContentWidth()"
-           [style.transform]="'translateX(' + (-scrollLeft()) + 'px)'"
            [class.gg-col-virt]="!suppressColumnVirtualisation()">
         @for (col of renderedColumns(); track trackByCol($index, col); let i = $index) {
           <div
@@ -132,7 +131,6 @@
             [style.min-width.px]="col.computedWidth"
             [style.left.px]="col.pinned === 'left' || !suppressColumnVirtualisation() ? col.left : null"
             [style.position]="col.pinned ? null : (suppressColumnVirtualisation() ? null : 'absolute')"
-            [style.transform]="col.pinned === 'left' ? 'translateX(' + scrollLeft() + 'px)' : null"
             [attr.draggable]="!col.suppressMovable"
             (click)="onHeaderClick(col, $event)"
             (contextmenu)="onHeaderContextMenu(col, $event)"
@@ -190,8 +188,7 @@
     <!-- floating filter row -->
     @if (hasAnyFloatingFilter()) {
       <div class="gg-floating-filter-row"
-        [style.width.px]="totalContentWidth()"
-        [style.transform]="'translateX(' + (-scrollLeft()) + 'px)'">
+        [style.width.px]="totalContentWidth()">
         @for (col of renderColumns(); track trackByCol($index, col)) {
           <div class="gg-floating-filter-cell"
             [class.gg-pinned-left]="col.pinned === 'left'"
@@ -199,7 +196,6 @@
             [style.width.px]="col.computedWidth"
             [style.min-width.px]="col.computedWidth"
             [style.left.px]="col.pinned === 'left' ? col.left : null"
-            [style.transform]="col.pinned === 'left' ? 'translateX(' + scrollLeft() + 'px)' : null"
           >
             @if (col.colDef.floatingFilter && col.colDef.filter) {
               @if (floatingFilterComponentType(col); as cmp) {
