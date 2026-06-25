@@ -905,7 +905,27 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     return slice;
   });
 
-  readonly bodyTotalHeight = computed(() => this.rowOffsets().total);
+  /**
+   * Body canvas height. For client-side rows it's just the sum of all rendered
+   * row heights. For server-side paginated rows we floor the height to
+   * `pageSize × rowHeight` so the canvas never shrinks between page navigations
+   * — both when fewer rows momentarily render during a fetch and when the last
+   * page has fewer rows than a full page. Stabilising the height kills two
+   * UI nits in one signal:
+   *   1) The vertical scrollbar no longer flashes (appears / disappears) on
+   *      every page change because the body's content height stays consistent
+   *      against the viewport.
+   *   2) The grid no longer visually "jumps" smaller and back, so the user
+   *      perceives smooth page navigation rather than a layout shift.
+   */
+  readonly bodyTotalHeight = computed(() => {
+    const actual = this.rowOffsets().total;
+    if (this.isServerSidePaginated()) {
+      const floor = this.effectivePageSize() * this.rowHeight();
+      return Math.max(actual, floor);
+    }
+    return actual;
+  });
 
   readonly renderColumns = computed<RenderColumn<TRow>[]>(() => {
     const cols = this.visibleColumns();
@@ -2870,7 +2890,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   }
 
   trackByCol = (_: number, c: ResolvedColumn<TRow>) => c.colId;
-  trackByRow = (_: number, r: { row: FlattenedRow<TRow> }) => r.row.id;
+  /**
+   * Row track-by. For client-side rows we track by stable id so re-orders /
+   * filter / sort animate correctly (Angular reuses the same DOM nodes that
+   * matched by id). For server-side paginated rows we track by index instead:
+   * page-N row 0 and page-N+1 row 0 are intentionally different rows (the
+   * page is the unit), so reusing the DOM node at index 0 and just patching
+   * its data is correct AND eliminates the destroy/create churn that produced
+   * a visible flicker on every page change.
+   */
+  trackByRow = (i: number, r: { row: FlattenedRow<TRow> }) =>
+    this.isServerSidePaginated() ? i : r.row.id;
   trackByCtx = (_: number, item: ContextMenuItem<TRow>) => item.name + (item.separator ? '|sep' : '');
 
   /** Resolve the component type passed via colDef.cellComponent. */

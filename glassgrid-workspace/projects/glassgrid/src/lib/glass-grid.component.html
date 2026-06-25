@@ -489,15 +489,6 @@
         }
       </div>
 
-      @if (loading() || loadingOverlayInternal()) {
-        <div class="gg-overlay gg-overlay-loading" role="status">
-          <div class="gg-overlay-content">{{ loadingMessage() }}</div>
-        </div>
-      } @else if (totalDisplayed() === 0) {
-        <div class="gg-overlay gg-overlay-empty" role="status">
-          <div class="gg-overlay-content">{{ noRowsMessage() }}</div>
-        </div>
-      }
     </div>
 
     <!-- pinned bottom rows -->
@@ -570,6 +561,19 @@
         <button type="button" class="gg-page-btn" (click)="paginationPrev()" [disabled]="api.paginationGetCurrentPage() === 0" [attr.aria-label]="t()('prevPage')">‹</button>
         <button type="button" class="gg-page-btn" (click)="paginationNext()" [disabled]="api.paginationGetCurrentPage() >= api.paginationGetTotalPages() - 1" [attr.aria-label]="t()('nextPage')">›</button>
         <button type="button" class="gg-page-btn" (click)="paginationLast()" [disabled]="api.paginationGetCurrentPage() >= api.paginationGetTotalPages() - 1" [attr.aria-label]="t()('lastPage')">»</button>
+      </div>
+    }
+
+    <!-- Loading / empty overlay — child of .gg-main (not .gg-body) so it
+         centers across the FULL grid height (header + body + pagination)
+         instead of just the body. Sized via inset:0 + flex centering. -->
+    @if (loading() || loadingOverlayInternal()) {
+      <div class="gg-overlay gg-overlay-loading" role="status">
+        <div class="gg-overlay-content">{{ loadingMessage() }}</div>
+      </div>
+    } @else if (totalDisplayed() === 0) {
+      <div class="gg-overlay gg-overlay-empty" role="status">
+        <div class="gg-overlay-content">{{ noRowsMessage() }}</div>
       </div>
     }
   </div>

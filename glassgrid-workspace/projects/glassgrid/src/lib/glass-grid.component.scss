@@ -418,6 +418,12 @@
   grid-template-rows: auto auto 1fr auto auto;
   min-height: 0;
   min-width: 0;
+  // Positioning context for the loading / empty overlay so it can span the
+  // FULL grid height (header + body + pagination) via inset:0 and centre its
+  // content with align-items / justify-content. Previously the overlay lived
+  // inside .gg-body and centred only over the body, which landed the loading
+  // text low when the body's row content was shorter than the grid height.
+  position: relative;
 }
 
 // header
@@ -1182,6 +1188,9 @@
   backdrop-filter: blur(2px);
   pointer-events: none;
   animation: gg-fade-in var(--gg-anim-duration) var(--gg-anim-easing);
+  // Stack above the grid body, floating-filter row, and pagination so the
+  // loading text is always visible regardless of which grid section it spans.
+  z-index: 5;
 }
 @keyframes gg-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .gg-overlay-content {
