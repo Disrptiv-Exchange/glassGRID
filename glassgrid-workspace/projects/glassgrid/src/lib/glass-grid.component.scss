@@ -1192,6 +1192,14 @@
   // loading text is always visible regardless of which grid section it spans.
   z-index: 5;
 }
+// Empty-state overlay: the grid has finished loading and has zero rows.
+// There is nothing to dim, so suppress the backdrop blur and translucent
+// background — the header / column labels stay fully crisp and the
+// "No rows to show" text sits cleanly on the grid's existing background.
+.gg-overlay.gg-overlay-empty {
+  backdrop-filter: none;
+  background: transparent;
+}
 @keyframes gg-fade-in { from { opacity: 0; } to { opacity: 1; } }
 .gg-overlay-content {
   padding: 10px 16px; border-radius: 6px;

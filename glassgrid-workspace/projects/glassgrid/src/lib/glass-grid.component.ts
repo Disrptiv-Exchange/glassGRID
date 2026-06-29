@@ -3626,7 +3626,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       },
 
       // ---- ag-grid compat: no-rows overlay ----
-      showNoRowsOverlay() { self.loadingOverlayInternal.set(true); },
+      // ag-grid contract: `showNoRowsOverlay()` displays the "No rows to show"
+      // message. Previously this set the LOADING overlay flag instead, which
+      // is the exact opposite — consumers calling this on a 204 / empty
+      // response saw "Loading…" forever. Correct behaviour: clear the loading
+      // flag and empty the row buffer. The template's @else-if branch already
+      // renders the empty-state overlay automatically when totalDisplayed === 0
+      // AND loading is false.
+      showNoRowsOverlay() {
+        self.loadingOverlayInternal.set(false);
+        self.localRowData.set([]);
+        self.serverSideTotal.set(0);
+      },
 
       // ---- ag-grid compat: legacy floating filter access ----
       // ag-grid's `getFilterInstance(field)` returned a per-column filter
@@ -3747,13 +3758,30 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       sortModel: this.sortModel(),
       filterModel: this.filterModel(),
       successCallback: (rows: TRow[], lastRow?: number) => {
-        // Replace the row buffer with just this page's rows. Pagination
-        // bookkeeping (totalPages / pageRowStart / End) reads serverSideTotal
-        // for the real numerator/denominator, not localRowData.length.
-        this.localRowData.set(rows.slice());
-        if (typeof lastRow === 'number') this.serverSideTotal.set(lastRow);
-        this.loadingOverlayInternal.set(false);
-        if (this.debug()) console.log('[glassGRID] server page loaded', { page, size, startRow, endRow, rows: rows.length, lastRow });
+        try {
+          // Defensive: consumers may call successCallback(undefined) or
+          // successCallback(null) on 204 No Content / empty body / network
+          // glitch. Coerce to an array so .slice() doesn't throw and strand
+          // the loading overlay on. Replace the row buffer with just this
+          // page's rows. Pagination bookkeeping (totalPages / pageRowStart /
+          // End) reads serverSideTotal for the real numerator/denominator,
+          // not localRowData.length.
+          const safeRows = Array.isArray(rows) ? rows : [];
+          this.localRowData.set(safeRows.slice());
+          if (typeof lastRow === 'number') {
+            this.serverSideTotal.set(lastRow);
+          } else if (safeRows.length === 0 && page === 0) {
+            // Empty first page with no lastRow → total is zero. Without this
+            // serverSideTotal would stay null and totalPages would render "1".
+            this.serverSideTotal.set(0);
+          }
+          if (this.debug()) console.log('[glassGRID] server page loaded', { page, size, startRow, endRow, rows: safeRows.length, lastRow });
+        } finally {
+          // ALWAYS clear loading, even if any of the above throws — otherwise
+          // an exception in localRowData.set / serverSideTotal.set strands the
+          // "Loading…" overlay on screen forever.
+          this.loadingOverlayInternal.set(false);
+        }
       },
       failCallback: () => {
         this.loadingOverlayInternal.set(false);
@@ -3776,14 +3804,22 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       sortModel: this.sortModel(),
       filterModel: this.filterModel(),
       successCallback: (rows: TRow[], lastRow?: number) => {
-        const existing = this.localRowData() ?? this.rowData() ?? [];
-        const next = existing.slice();
-        for (let i = 0; i < rows.length; i++) next[startRow + i] = rows[i]!;
-        // trim trailing if lastRow known
-        if (typeof lastRow === 'number' && next.length > lastRow) next.length = lastRow;
-        this.localRowData.set(next);
-        this.loadingOverlayInternal.set(false);
-        if (this.debug()) console.log('[glassGRID] infinite block loaded', { blockIndex, startRow, endRow, lastRow, rows: rows.length });
+        try {
+          // Defensive: consumers may call successCallback(undefined) or null
+          // on 204 / empty body. Coerce to an array so the loop below doesn't
+          // throw and strand the loading overlay.
+          const safeRows = Array.isArray(rows) ? rows : [];
+          const existing = this.localRowData() ?? this.rowData() ?? [];
+          const next = existing.slice();
+          for (let i = 0; i < safeRows.length; i++) next[startRow + i] = safeRows[i]!;
+          // trim trailing if lastRow known
+          if (typeof lastRow === 'number' && next.length > lastRow) next.length = lastRow;
+          this.localRowData.set(next);
+          if (this.debug()) console.log('[glassGRID] infinite block loaded', { blockIndex, startRow, endRow, lastRow, rows: safeRows.length });
+        } finally {
+          // ALWAYS clear loading, even if any of the above throws.
+          this.loadingOverlayInternal.set(false);
+        }
       },
       failCallback: () => {
         this.infiniteFetched.delete(blockIndex);
