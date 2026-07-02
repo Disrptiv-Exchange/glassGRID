@@ -918,6 +918,30 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
    *   2) The grid no longer visually "jumps" smaller and back, so the user
    *      perceives smooth page navigation rather than a layout shift.
    */
+  /**
+   * Cumulative sticky-top offsets for each row that is anchored below the
+   * previous ones in the sticky header stack. In v0.4.75 the grid uses a
+   * SINGLE horizontally- and vertically-scrolling container (`.gg-body`) that
+   * hosts the group header rows, the main header, the floating-filter row,
+   * the pinned-top rows, the row canvas, and the pinned-bottom rows. Each of
+   * those rows is `position: sticky; top: <offset>` so that:
+   *   - horizontal scroll is native compositor scroll (zero JS on the tick),
+   *     killing the drag-scroll jitter that used to happen when the header
+   *     transform lagged the body scroll by one frame; and
+   *   - vertical scroll pins the header stack to the top of the viewport.
+   * Row heights are assumed uniform at `headerHeight()`; each row's top is
+   * the sum of the heights above it.
+   */
+  protected readonly stickyOffsets = computed(() => {
+    const hh = this.headerHeight();
+    const groupLevels = this.headerTree().levels.length;
+    const hasFF = this.hasAnyFloatingFilter();
+    const mainHeader = groupLevels * hh;
+    const floatingFilter = mainHeader + hh;
+    const pinnedTop = floatingFilter + (hasFF ? hh : 0);
+    return { mainHeader, floatingFilter, pinnedTop };
+  });
+
   readonly bodyTotalHeight = computed(() => {
     const actual = this.rowOffsets().total;
     if (this.isServerSidePaginated()) {
@@ -1447,13 +1471,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   @HostListener('window:resize') onWindowResize() { this.measureViewport(); }
   ngAfterViewInit() {
     this.measureViewport();
-    // Seed --gg-scroll-x so header / floating-filter / pinned-left transforms
-    // resolve to translateX(0) before the first scroll event arrives. Without
-    // this seed, calc(-1 * var(--gg-scroll-x, 0px)) still falls back to 0px,
-    // but the explicit set keeps the property visible in DevTools and is a
-    // one-line guarantee against any future CSS that omits the fallback.
-    const host = this.el?.nativeElement as HTMLElement | undefined;
-    if (host) host.style.setProperty('--gg-scroll-x', '0px');
     // Track host/parent resize too — window:resize alone misses layout changes
     // like sidebar toggle or flex-container reflow, which leave fitGridWidth
     // out of date and produce empty whitespace on the right.
@@ -1482,34 +1499,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const el = ev.target as HTMLDivElement;
     const scrollLeft = el.scrollLeft;
     const scrollTop = el.scrollTop;
-    const host = this.el?.nativeElement as HTMLElement | undefined;
-    if (host) {
-      // Keep the CSS custom property up to date for anything reading it —
-      // consumer themes, tests, external tooling. The transform below is what
-      // the browser actually uses for the visible header (inline styles win
-      // specificity over the .scss rule), so this write is purely informative.
-      host.style.setProperty('--gg-scroll-x', scrollLeft + 'px');
-      // Direct inline transform writes on the compositor-promoted elements.
-      // Bypasses the `transform: translateX(calc(-1 * var(--gg-scroll-x)))`
-      // path, which requires a style recalc to propagate --gg-scroll-x to
-      // descendants and re-evaluate calc(). Style recalc waits on the main
-      // thread; if Angular CD or any other main-thread work delays it even
-      // 3-5 ms, the transform lands one composite frame LATE while the body
-      // has already scrolled (compositor-only, no main-thread wait) — that
-      // asymmetry is the header jitter/shake during fast drag-scroll.
-      //
-      // Writing inline `element.style.transform` skips style recalc entirely:
-      // the compositor picks up the new transform value in the SAME paint
-      // frame as the body's native scroll. Zero lag at any drag speed.
-      const negX = `translateX(${-scrollLeft}px)`;
-      const posX = `translateX(${scrollLeft}px)`;
-      const headerCells = host.querySelectorAll<HTMLElement>('.gg-header:not(.gg-header-groups) > .gg-header-cells');
-      for (let i = 0; i < headerCells.length; i++) headerCells[i]!.style.transform = negX;
-      const filterRow = host.querySelector<HTMLElement>('.gg-floating-filter-row');
-      if (filterRow) filterRow.style.transform = negX;
-      const pinnedCells = host.querySelectorAll<HTMLElement>('.gg-header-cell.gg-pinned-left, .gg-floating-filter-cell.gg-pinned-left');
-      for (let i = 0; i < pinnedCells.length; i++) pinnedCells[i]!.style.transform = posX;
-    }
+    // v0.4.75: no JS transform writes are needed on scroll. The header rows,
+    // floating-filter row, and pinned-left header cells all live INSIDE the
+    // same scroll container as the body and are `position: sticky`, so the
+    // compositor paints them at the correct offset in the same frame as the
+    // body — no main-thread work required and no frame lag possible.
+    // We still update the scrollLeft / scrollTop signals for consumer
+    // callbacks and column-virtualisation logic.
     this.scrollTop.set(scrollTop);
     this.scrollLeft.set(scrollLeft);
     this.bodyScroll.emit({ top: scrollTop, left: scrollLeft });

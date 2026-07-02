@@ -437,33 +437,59 @@
 }
 .gg-header-cells { display: flex; flex: 0 0 auto; }
 
-/* ---- horizontal-scroll tracking (v0.4.70) ----
+/* ---- horizontal-scroll sync (v0.4.75 — sticky-header architecture) ----
  *
- * The grid body scrolls natively (browser-driven). The main column header,
- * the floating-filter row, and any pinned-left header / filter cells must
- * stay perfectly locked to the body during scroll — including fast drag-
- * scroll where one CD cycle's worth of frame lag is visible as a header
- * "shake" before snapping back into alignment.
+ * PREVIOUS APPROACH (v0.4.70–v0.4.74): the grid had SIBLING header and body
+ * elements. The body scrolled natively; the header was translated via
+ * `translateX(-scrollLeft)` — first through an Angular signal binding,
+ * then via `--gg-scroll-x` custom property (v0.4.70), then via inline
+ * style writes (v0.4.74). All three trailed the compositor by one paint
+ * frame during fast drag-scroll because the scroll event fires on the
+ * MAIN thread after the compositor has already painted the body at its
+ * new offset.
  *
- * Previously these elements bound `[style.transform]="translateX(-scrollLeft())"`
- * via a signal — Angular's CD scheduled the DOM write a frame after the body
- * had already scrolled, producing the shake. The fix is to write the offset
- * SYNCHRONOUSLY in the scroll handler as the `--gg-scroll-x` custom property
- * on the host (see GlassGridComponent.onBodyScroll), then drive these
- * transforms from CSS — the browser applies them in the same paint frame
- * as the scroll, with no JS round-trip.
+ * NEW APPROACH (v0.4.75): the header rows, floating-filter row, pinned-top
+ * rows, row canvas, and pinned-bottom row all live INSIDE the single
+ * `.gg-body` scroll container. Header-like rows are `position: sticky;
+ * top: <cumulative-offset>`; pinned-bottom is `position: sticky; bottom: 0`;
+ * pinned-left cells are `position: sticky; left: 0`. Horizontal scroll is
+ * compositor-native — the browser paints header cells and body cells at
+ * the SAME offset in the SAME frame. Zero JS on the scroll tick.
  *
- * Group header rows (.gg-header-groups > .gg-header-cells) are intentionally
- * excluded — they did not track horizontal scroll before this refactor and
- * preserving that behaviour avoids a drive-by change. */
-:host .gg-header:not(.gg-header-groups) > .gg-header-cells,
-:host .gg-floating-filter-row {
-  transform: translateX(calc(-1 * var(--gg-scroll-x, 0px)));
-  will-change: transform;
+ * The `[style.top.px]="stickyOffsets().mainHeader"` bindings in the template
+ * stack the sticky rows so each rests just below the one above it. */
+:host .gg-sticky-row {
+  position: sticky;
+  z-index: 3;
+  background: var(--gg-header-bg);
+  /* Sticky elements' `top` is set inline via [style.top.px]. */
 }
+:host .gg-floating-filter-row.gg-sticky-row {
+  background: var(--gg-bg);
+  z-index: 2;
+}
+:host .gg-pinned-top.gg-sticky-row {
+  background: var(--gg-bg);
+  z-index: 2;
+}
+:host .gg-pinned-bottom.gg-sticky-bottom-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--gg-bg);
+}
+/* Pinned-left cells inside the sticky rows: also sticky to the LEFT edge of
+ * the scroll container, so they stay visible during horizontal scroll. Same
+ * mechanism as the pre-existing sticky-left on body cells (line 501 below). */
 :host .gg-header-cell.gg-pinned-left,
 :host .gg-floating-filter-cell.gg-pinned-left {
-  transform: translateX(var(--gg-scroll-x, 0px));
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--gg-header-bg);
+}
+:host .gg-floating-filter-cell.gg-pinned-left {
+  background: var(--gg-bg);
 }
 .gg-header-cell {
   display: flex;

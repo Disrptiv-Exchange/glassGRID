@@ -64,9 +64,32 @@
 
   <div class="gg-main">
 
+    <!--
+      v0.4.75: single scroll container. Everything that used to be a separate
+      sibling of `.gg-main` (column-group header rows, main header row,
+      floating-filter row, pinned-top rows, row canvas, pinned-bottom rows) is
+      now a stacked child of `.gg-body`. Header-like rows are `position:
+      sticky; top: <cumulative-offset>` and the pinned-bottom row is
+      `position: sticky; bottom: 0`. Horizontal scroll is compositor-native —
+      the header, filter and pinned rows all move in the same paint frame as
+      the body content, so there is no drag-scroll jitter regardless of
+      main-thread load.
+    -->
+    <div
+      #viewport
+      class="gg-body"
+      tabindex="0"
+      (scroll)="onBodyScroll($event)"
+      [attr.aria-busy]="loading() ? 'true' : null"
+    >
+
     <!-- column-group header rows (one per group level, top down) -->
-    @for (level of headerTree().levels; track $index) {
-      <div class="gg-header gg-header-groups" [style.height.px]="headerHeight()">
+    @for (level of headerTree().levels; track $index; let li = $index) {
+      <div
+        class="gg-header gg-header-groups gg-sticky-row"
+        [style.height.px]="headerHeight()"
+        [style.top.px]="li * headerHeight()"
+      >
         <div class="gg-header-cells" [style.width.px]="totalContentWidth()">
           @for (g of level.groups; track g.groupId) {
             <div
@@ -88,25 +111,12 @@
       </div>
     }
 
-    <!-- left pin drop zone (only visible while dragging a column) -->
-    @if (draggingCol()) {
-      <div
-        class="gg-pin-zone gg-pin-zone-left"
-        [class.gg-pin-zone-hot]="pinZoneHot()"
-        data-testid="pin-zone-left"
-        (dragover)="onPinZoneDragOver($event)"
-        (dragleave)="onPinZoneDragLeave()"
-        (drop)="onPinZoneDrop($event)"
-      >
-        <span class="gg-pin-zone-label">📌 Drop to pin left</span>
-      </div>
-    }
-
     <!-- header -->
     <div
-      class="gg-header"
+      class="gg-header gg-sticky-row"
       role="row"
       [style.height.px]="headerHeight()"
+      [style.top.px]="stickyOffsets().mainHeader"
       (pointermove)="onResizeMove($event)"
       (pointerup)="onResizeEnd($event)"
     >
@@ -187,8 +197,9 @@
 
     <!-- floating filter row -->
     @if (hasAnyFloatingFilter()) {
-      <div class="gg-floating-filter-row"
-        [style.width.px]="totalContentWidth()">
+      <div class="gg-floating-filter-row gg-sticky-row"
+        [style.width.px]="totalContentWidth()"
+        [style.top.px]="stickyOffsets().floatingFilter">
         @for (col of renderColumns(); track trackByCol($index, col)) {
           <div class="gg-floating-filter-cell"
             [class.gg-pinned-left]="col.pinned === 'left'"
@@ -251,7 +262,9 @@
 
     <!-- pinned top rows -->
     @if (pinnedTopNodes().length) {
-      <div class="gg-pinned-top" role="rowgroup">
+      <div class="gg-pinned-top gg-sticky-row"
+        role="rowgroup"
+        [style.top.px]="stickyOffsets().pinnedTop">
         <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
           @for (n of pinnedTopNodes(); track n.id; let pix = $index) {
             <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
@@ -274,16 +287,12 @@
       </div>
     }
 
-    <!-- body -->
-    <div
-      #viewport
-      class="gg-body"
-      role="rowgroup"
-      tabindex="0"
-      (scroll)="onBodyScroll($event)"
-      [attr.aria-busy]="loading() ? 'true' : null"
-    >
-      <div class="gg-body-canvas" [style.height.px]="bodyTotalHeight()" [style.width.px]="totalContentWidth()">
+    <!-- body canvas (data rows). The scroll container / viewport is the
+         outer `.gg-body` wrapper opened above; this element is now just the
+         content layer that holds the row DOM. -->
+    <div class="gg-body-canvas" role="rowgroup"
+         [style.height.px]="bodyTotalHeight()"
+         [style.width.px]="totalContentWidth()">
         @for (entry of renderedRows(); track trackByRow($index, entry)) {
           @if (isGroupRow(entry.row)) {
             <div
@@ -487,13 +496,11 @@
             </div>
           }
         }
-      </div>
+      </div><!-- /.gg-body-canvas -->
 
-    </div>
-
-    <!-- pinned bottom rows -->
+    <!-- pinned bottom rows — inside the scroll container, sticky at bottom. -->
     @if (pinnedBottomNodes().length) {
-      <div class="gg-pinned-bottom" role="rowgroup">
+      <div class="gg-pinned-bottom gg-sticky-bottom-row" role="rowgroup">
         <div class="gg-pinned-canvas" [style.width.px]="totalContentWidth()">
           @for (n of pinnedBottomNodes(); track n.id; let pix = $index) {
             <div class="gg-row gg-row-pinned" role="row" [ngClass]="rowClasses(n, pix)" [ngStyle]="rowStyles(n, pix)" [style.height.px]="rowHeight()" [style.width.px]="totalContentWidth()">
@@ -513,6 +520,24 @@
             </div>
           }
         </div>
+      </div>
+    }
+
+    </div><!-- /.gg-body (the outer scroll container) -->
+
+    <!-- left pin drop zone: absolute-positioned overlay only visible while
+         dragging a column. Positioned outside the scroll container so it
+         stays fixed in view during column drag. -->
+    @if (draggingCol()) {
+      <div
+        class="gg-pin-zone gg-pin-zone-left"
+        [class.gg-pin-zone-hot]="pinZoneHot()"
+        data-testid="pin-zone-left"
+        (dragover)="onPinZoneDragOver($event)"
+        (dragleave)="onPinZoneDragLeave()"
+        (drop)="onPinZoneDrop($event)"
+      >
+        <span class="gg-pin-zone-label">📌 Drop to pin left</span>
       </div>
     }
 
