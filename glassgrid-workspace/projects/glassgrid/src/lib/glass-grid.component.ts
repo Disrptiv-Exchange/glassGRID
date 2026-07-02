@@ -1297,15 +1297,24 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     //   triggers ONE reflow that serves all subsequent reads from the browser cache.
     try {
       // ── Phase A — pure reads: collect computed style metadata, build specs ──
-      // Headers: parse padding + gap + filter visible children. No probe writes.
+      // Headers: clone the ENTIRE `.gg-header-cell` (not just its children).
+      // The cell class carries `text-transform: uppercase`, `font-weight: 600`,
+      // `letter-spacing: 0.04em`, `font-size: 11px` — all inherited by descendants.
+      // Cloning children into a bare probe <div> breaks the inheritance chain
+      // (Angular's `_ngcontent-*` attribute selectors don't match the raw div
+      // either), so the probe measured the label with default styles and
+      // reported a text width narrower than the actual rendered uppercase text.
+      // The column was then sized too small and the header truncated with `…`.
+      //
+      // Cloning the whole cell preserves the class + `_ngcontent-*` attribute
+      // via `cloneNode(true)`, so the encapsulated class-based rules apply and
+      // measurements match reality.
       const headerCells = host.querySelectorAll<HTMLElement>('.gg-header-cell[aria-colindex]');
 
       interface HeaderSpec {
         colId: string;
-        padding: number;
-        gap: number;
-        children: HTMLElement[];
-        slots: HTMLDivElement[];
+        cell: HTMLElement;
+        slot: HTMLDivElement | null;
       }
       const headerSpecs: HeaderSpec[] = [];
 
@@ -1313,17 +1322,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         const idx = Number(hc.getAttribute('aria-colindex'));
         const colId = colByAriaIndex.get(idx);
         if (!colId) return;
-        const cs = getComputedStyle(hc);
-        const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-        const gap = parseFloat(cs.columnGap || cs.gap || '0') || 0;
-        // getComputedStyle(c) here is still Phase A — probe has not been written yet.
-        const children = Array.from(hc.children).filter(
-          (c): c is HTMLElement =>
-            c instanceof HTMLElement &&
-            !c.classList.contains('gg-resize-handle') &&
-            getComputedStyle(c).display !== 'none',
-        );
-        headerSpecs.push({ colId, padding, gap, children, slots: [] });
+        headerSpecs.push({ colId, cell: hc, slot: null });
       });
 
       // Body cells — measure whatever the consumer rendered (text, renderer
@@ -1354,16 +1353,31 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       });
 
       // ── Phase B — pure writes: clone all elements into the probe, no reads ──
+      // For headers: clone the ENTIRE `.gg-header-cell` and strip only the
+      // resize handle (it isn't part of the intrinsic label + affordance width).
+      // The clone retains the cell's class + Angular content attribute, so all
+      // scoped CSS (uppercase, letter-spacing, font-size 11, font-weight 600)
+      // applies. Force overflow:visible + width:auto + min-width:0 +
+      // max-width:none + flex-basis:auto so intrinsic content width isn't
+      // clipped or grid-track-constrained inside the probe.
       for (const spec of headerSpecs) {
-        for (const child of spec.children) {
-          const slot = document.createElement('div');
-          slot.style.cssText =
-            'position:absolute;top:0;left:0;display:inline-block;' +
-            'white-space:nowrap;padding:0;border:0;margin:0;';
-          slot.appendChild(child.cloneNode(true));
-          spec.slots.push(slot);
-          probe.appendChild(slot);
-        }
+        const slot = document.createElement('div');
+        slot.style.cssText =
+          'position:absolute;top:0;left:0;display:inline-flex;align-items:center;' +
+          'white-space:nowrap;padding:0;border:0;margin:0;';
+        const cellClone = spec.cell.cloneNode(true) as HTMLElement;
+        cellClone.querySelectorAll('.gg-resize-handle').forEach((el) => el.remove());
+        cellClone.style.width = 'auto';
+        cellClone.style.minWidth = '0';
+        cellClone.style.maxWidth = 'none';
+        cellClone.style.flex = '0 0 auto';
+        cellClone.style.overflow = 'visible';
+        cellClone.style.position = 'static';
+        cellClone.style.transform = 'none';
+        cellClone.style.left = 'auto';
+        slot.appendChild(cellClone);
+        spec.slot = slot;
+        probe.appendChild(slot);
       }
       for (const spec of cellSpecs) {
         if (!spec.inner) continue;
@@ -1377,12 +1391,14 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       }
 
       // ── Phase C — pure reads: ONE reflow serves every scrollWidth read ──
+      // For headers: read the whole cloned cell's scrollWidth. This gives the
+      // intrinsic content width (padding + all children + gaps) as the browser
+      // itself would compute it — no per-child summing, no gap/padding math,
+      // no dropped inheritance.
       for (const spec of headerSpecs) {
-        if (!spec.slots.length) continue;
-        let sum = 0;
-        for (const slot of spec.slots) sum += slot.scrollWidth;
-        const total = sum + Math.max(0, spec.slots.length - 1) * spec.gap + spec.padding;
-        considerHeader(spec.colId, total + GlassGridComponent.AUTO_FIT_BUFFER_PX);
+        if (!spec.slot) continue;
+        const w = spec.slot.scrollWidth;
+        considerHeader(spec.colId, w + GlassGridComponent.AUTO_FIT_BUFFER_PX);
       }
       for (const spec of cellSpecs) {
         if (!spec.slot) continue;
@@ -1464,21 +1480,41 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
   onBodyScroll(ev: Event) {
     const el = ev.target as HTMLDivElement;
-    // Write the horizontal scroll offset SYNCHRONOUSLY as a CSS custom
-    // property on the host BEFORE Angular's signal-driven change detection
-    // runs. The header, floating-filter row, and pinned-left cells consume
-    // --gg-scroll-x via plain CSS transforms (see glass-grid.component.scss),
-    // so they reflow in the same paint frame as the natively-scrolling body.
-    // Without this, [style.transform]="…scrollLeft()…" bindings trailed the
-    // native body scroll by one CD cycle, producing a visible header shake
-    // during fast drag-scroll.
+    const scrollLeft = el.scrollLeft;
+    const scrollTop = el.scrollTop;
     const host = this.el?.nativeElement as HTMLElement | undefined;
-    if (host) host.style.setProperty('--gg-scroll-x', el.scrollLeft + 'px');
-    this.scrollTop.set(el.scrollTop);
-    this.scrollLeft.set(el.scrollLeft);
-    this.bodyScroll.emit({ top: el.scrollTop, left: el.scrollLeft });
+    if (host) {
+      // Keep the CSS custom property up to date for anything reading it —
+      // consumer themes, tests, external tooling. The transform below is what
+      // the browser actually uses for the visible header (inline styles win
+      // specificity over the .scss rule), so this write is purely informative.
+      host.style.setProperty('--gg-scroll-x', scrollLeft + 'px');
+      // Direct inline transform writes on the compositor-promoted elements.
+      // Bypasses the `transform: translateX(calc(-1 * var(--gg-scroll-x)))`
+      // path, which requires a style recalc to propagate --gg-scroll-x to
+      // descendants and re-evaluate calc(). Style recalc waits on the main
+      // thread; if Angular CD or any other main-thread work delays it even
+      // 3-5 ms, the transform lands one composite frame LATE while the body
+      // has already scrolled (compositor-only, no main-thread wait) — that
+      // asymmetry is the header jitter/shake during fast drag-scroll.
+      //
+      // Writing inline `element.style.transform` skips style recalc entirely:
+      // the compositor picks up the new transform value in the SAME paint
+      // frame as the body's native scroll. Zero lag at any drag speed.
+      const negX = `translateX(${-scrollLeft}px)`;
+      const posX = `translateX(${scrollLeft}px)`;
+      const headerCells = host.querySelectorAll<HTMLElement>('.gg-header:not(.gg-header-groups) > .gg-header-cells');
+      for (let i = 0; i < headerCells.length; i++) headerCells[i]!.style.transform = negX;
+      const filterRow = host.querySelector<HTMLElement>('.gg-floating-filter-row');
+      if (filterRow) filterRow.style.transform = negX;
+      const pinnedCells = host.querySelectorAll<HTMLElement>('.gg-header-cell.gg-pinned-left, .gg-floating-filter-cell.gg-pinned-left');
+      for (let i = 0; i < pinnedCells.length; i++) pinnedCells[i]!.style.transform = posX;
+    }
+    this.scrollTop.set(scrollTop);
+    this.scrollLeft.set(scrollLeft);
+    this.bodyScroll.emit({ top: scrollTop, left: scrollLeft });
     if (this.scrollEndTimer) clearTimeout(this.scrollEndTimer);
-    this.scrollEndTimer = setTimeout(() => this.bodyScrollEnd.emit({ top: el.scrollTop, left: el.scrollLeft }), 150);
+    this.scrollEndTimer = setTimeout(() => this.bodyScrollEnd.emit({ top: scrollTop, left: scrollLeft }), 150);
   }
 
   // ===== header interactions (sort / resize / drag / filter button) =====
