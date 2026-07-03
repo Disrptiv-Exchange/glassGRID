@@ -942,14 +942,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     return { mainHeader, floatingFilter, pinnedTop };
   });
 
-  readonly bodyTotalHeight = computed(() => {
-    const actual = this.rowOffsets().total;
-    if (this.isServerSidePaginated()) {
-      const floor = this.effectivePageSize() * this.rowHeight();
-      return Math.max(actual, floor);
-    }
-    return actual;
-  });
+  // v0.4.78: reverted the v0.4.72 server-paginated pageSize×rowHeight floor.
+  // The floor was there to stabilise the vertical scrollbar during page
+  // navigation — a full page (20 rows) followed by a partial last page
+  // (7 rows) would previously toggle the scrollbar on/off — but consumers
+  // reported the more objectionable side effect: on the partial last page
+  // the canvas is padded to a full page's height so 13 rows worth of blank
+  // white space appears below the loaded rows. The scrollbar flash is a
+  // minor visual quirk that ag-grid, MUI DataGrid and every other grid
+  // library also has; the blank space is a clear layout bug. Return the
+  // canvas to the actual row content height so the scroll region always
+  // stops exactly at the last visible row.
+  readonly bodyTotalHeight = computed(() => this.rowOffsets().total);
 
   readonly renderColumns = computed<RenderColumn<TRow>[]>(() => {
     const cols = this.visibleColumns();

@@ -415,7 +415,17 @@
 }
 .gg-main {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  // v0.4.78: template updated for the v0.4.75 sticky-header architecture. In
+  // the old design .gg-main had 5 sibling children (group headers, main
+  // header, body, pinned-bottom, pagination) and needed a corresponding
+  // 5-row template with the body at 1fr. After v0.4.75 all the header /
+  // pinned rows live INSIDE the single .gg-body scroll container, so
+  // .gg-main's direct children are just body + optional status-bar +
+  // optional pagination. Placing the body in the FIRST row and marking it
+  // 1fr lets it fill the available vertical space (with its own
+  // overflow:auto handling scroll); the status-bar and pagination take auto
+  // rows below it, so pagination sits cleanly at the bottom of the grid.
+  grid-template-rows: 1fr auto auto;
   min-height: 0;
   min-width: 0;
   // Positioning context for the loading / empty overlay so it can span the
@@ -980,7 +990,15 @@
 // body
 .gg-body { position: relative; overflow: auto; outline: none; }
 .gg-body:focus-visible { box-shadow: inset 0 0 0 2px var(--gg-focus-ring); }
-.gg-body-canvas { position: relative; min-height: 100%; }
+// v0.4.78: min-height: 100% removed. Previously the canvas was forced to be
+// at least as tall as the body container so the "no rows" overlay had a
+// tall backdrop to centre against. With the overlay now living on .gg-main
+// (v0.4.72) that requirement disappeared — but this rule stayed and produced
+// the "vertical blank white space below the last row" reported by consumers
+// on grids where the row content is shorter than the available body height.
+// Letting the canvas size to its actual content means the scrollable region
+// stops exactly at the last row.
+.gg-body-canvas { position: relative; }
 
 .gg-row {
   position: absolute; left: 0; top: 0;
