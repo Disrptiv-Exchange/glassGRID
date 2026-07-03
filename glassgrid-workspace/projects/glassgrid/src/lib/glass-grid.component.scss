@@ -440,6 +440,16 @@
   // move horizontally with the un-pinned columns during scroll.
   overflow: visible;
   position: relative;
+  // v0.4.77: match the row's own width to its content width so the grey
+  // header background paints across the FULL scrolled row, not just the
+  // viewport-wide portion. The inner `.gg-header-cells` has explicit
+  // `width: totalContentWidth` px; without these rules the outer flex
+  // container defaults to viewport width and its child overflows visibly
+  // — the overflow renders correctly (v0.4.76) but the container's
+  // background stops at the viewport edge, revealing white space when
+  // the user scrolls past that boundary.
+  width: max-content;
+  min-width: 100%;
 }
 .gg-header-cells { display: flex; flex: 0 0 auto; }
 
@@ -1143,6 +1153,10 @@
   // un-pinned columns instead of staying anchored.
   overflow: visible;
   background: var(--gg-bg);
+  // v0.4.77: same content-width rule as .gg-header so the background paints
+  // the full scrolled row width instead of only the viewport-wide portion.
+  width: max-content;
+  min-width: 100%;
 }
 .gg-pinned-top { border-bottom: 2px solid var(--gg-border); }
 .gg-pinned-bottom { border-top: 2px solid var(--gg-border); }
