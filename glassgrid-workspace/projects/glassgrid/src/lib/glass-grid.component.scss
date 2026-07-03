@@ -432,7 +432,13 @@
   background: var(--gg-header-bg);
   color: var(--gg-header-fg);
   border-bottom: 1px solid var(--gg-border);
-  overflow: hidden;
+  // v0.4.76: overflow MUST stay `visible`. Any `overflow: hidden/auto/scroll`
+  // creates a new sticky containing block for descendants, which breaks
+  // `.gg-header-cell.gg-pinned-left { position: sticky; left: 0 }` — the
+  // pinned header cell would stick to `.gg-header`'s left edge instead of
+  // `.gg-body`'s left edge (the actual scroll container), and would visibly
+  // move horizontally with the un-pinned columns during scroll.
+  overflow: visible;
   position: relative;
 }
 .gg-header-cells { display: flex; flex: 0 0 auto; }
@@ -1130,7 +1136,12 @@
 // pinned top / bottom rows
 .gg-pinned-top, .gg-pinned-bottom {
   flex: 0 0 auto;
-  overflow: hidden;
+  // v0.4.76: overflow MUST stay `visible` — same reason as .gg-header above.
+  // If a consumer uses pinnedTopRowData / pinnedBottomRowData with a pinned-
+  // left column, `overflow: hidden` here would break the pinned cell's
+  // sticky-left resolution and it would scroll horizontally with the
+  // un-pinned columns instead of staying anchored.
+  overflow: visible;
   background: var(--gg-bg);
 }
 .gg-pinned-top { border-bottom: 2px solid var(--gg-border); }
