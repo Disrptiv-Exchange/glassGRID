@@ -469,7 +469,32 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   // find
   protected readonly findQuery = signal('');
-  protected readonly findMatches = signal<{ rowIndex: number; colIndex: number }[]>([]);
+  /**
+   * Find matches for the CURRENTLY DISPLAYED page, derived reactively.
+   *
+   * Was an imperatively-set signal computed once in setFindQuery() over the page that
+   * happened to be shown when the query was typed — so paging left stale rowIndex values
+   * and the highlight landed on the wrong cells (or none). As a computed over pagedRows()
+   * it re-derives on every page change, and findMatchKeys() (keyed by stable node id)
+   * then highlights the right cells for whatever page is on screen.
+   */
+  protected readonly findMatches = computed<{ rowIndex: number; colIndex: number }[]>(() => {
+    const ql = this.findQuery().trim().toLowerCase();
+    if (!ql) return [];
+    const rows = this.pagedRows();
+    const cols = this.renderColumns();
+    const matches: { rowIndex: number; colIndex: number }[] = [];
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r];
+      if (row?.kind !== 'leaf' || !row.node) continue;
+      for (let c = 0; c < cols.length; c++) {
+        const colDef = cols[c]!.colDef;
+        const v = getCellValue(colDef, row.node);
+        if (formatCellValue(colDef, row.node, v).toLowerCase().includes(ql)) matches.push({ rowIndex: r, colIndex: c });
+      }
+    }
+    return matches;
+  });
   protected readonly findIndex = signal(-1);
   /** Map of `${nodeId}:${colIndex}` → true for every find match in the current
    *  page. Built once when matches change so cellClasses() lookup is O(1).
@@ -1076,6 +1101,18 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         console.log('[glassGRID] gridReady', { rowModelType: this.rowModelType(), totalRows: this.totalDisplayed() });
       }
       this.gridReady.emit({ api: this.api, columnApi: this.api });
+    });
+
+    // Keep the Find pointer in range as the match set changes (query edit OR page change).
+    // findMatches is now a computed, so a page change re-derives it; without this the
+    // "N / M" counter and the current-match highlight could point past the new page's matches.
+    effect(() => {
+      const n = this.findMatches().length;
+      untracked(() => {
+        const cur = this.findIndex();
+        if (n === 0) { if (cur !== -1) this.findIndex.set(-1); }
+        else if (cur < 0 || cur >= n) { this.findIndex.set(0); }
+      });
     });
 
     // seed sort model + row group ids from defs
@@ -3133,21 +3170,8 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   // ===== find =====
   setFindQuery(q: string) {
     this.findQuery.set(q);
-    if (!q) { this.findMatches.set([]); this.findIndex.set(-1); return; }
-    const ql = q.toLowerCase();
-    const matches: { rowIndex: number; colIndex: number }[] = [];
-    const rows = this.pagedRows();
-    const cols = this.renderColumns();
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r];
-      if (row?.kind !== 'leaf' || !row.node) continue;
-      for (let c = 0; c < cols.length; c++) {
-        const colDef = cols[c]!.colDef;
-        const v = getCellValue(colDef, row.node);
-        if (formatCellValue(colDef, row.node, v).toLowerCase().includes(ql)) matches.push({ rowIndex: r, colIndex: c });
-      }
-    }
-    this.findMatches.set(matches);
+    // findMatches is a computed — reading it here reflects the new query synchronously.
+    const matches = this.findMatches();
     this.findIndex.set(matches.length ? 0 : -1);
     if (matches.length) this.scrollRowIntoView(matches[0]!.rowIndex);
   }
@@ -3402,7 +3426,7 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
           self.scrollRowIntoView(self.findMatches()[prev]!.rowIndex);
         }
       },
-      clearFind() { self.findQuery.set(''); self.findMatches.set([]); self.findIndex.set(-1); },
+      clearFind() { self.findQuery.set(''); self.findIndex.set(-1); },  // findMatches is a computed — clears reactively when the query empties
 
       getColumnState(): ColumnStateItem[] {
         return self.columnsWithState().map((c) => ({
