@@ -173,7 +173,11 @@
                 }
               </span>
             }
-            @if (col.colDef.filter) {
+            <!-- The generic filter-menu popup is hidden when the column supplies its own
+                 floating-filter component (that component owns filtering and writes a
+                 different model shape — showing both offers operators it can't honour),
+                 or when suppressFilterButton is explicitly set. -->
+            @if (col.colDef.filter && !col.colDef.suppressFilterButton && !floatingFilterComponentType(col)) {
               <button
                 type="button"
                 class="gg-filter-btn"
@@ -665,6 +669,9 @@
           }
         </select>
       </label>
+      <!-- blank / notBlank need no operand — hide the value input entirely for them
+           (previously it rendered an inert box the user could type into with no effect). -->
+      @if (draftFilter().type !== 'blank' && draftFilter().type !== 'notBlank') {
       <label class="gg-filter-row">
         @if (filterTypeFor(filterCol) === 'date') {
           <span class="gg-popup-date-wrap">
@@ -698,6 +705,7 @@
           />
         }
       </label>
+      }
       @if (draftFilter().type === 'inRange') {
         <label class="gg-filter-row">
           @if (filterTypeFor(filterCol) === 'date') {

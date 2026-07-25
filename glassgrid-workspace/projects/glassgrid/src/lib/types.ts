@@ -126,6 +126,18 @@ export interface ColumnDef<TRow = unknown, TValue = unknown> {
     | 'agTextColumnFilter' | 'agNumberColumnFilter' | 'agDateColumnFilter' | 'agSetColumnFilter'
     | 'agMultiColumnFilter';
   filterParams?: FilterParams<TRow, TValue>;
+  /**
+   * Suppress the header filter-menu button (the `⏷` popup) for this column.
+   *
+   * The popup writes a generic `{ type, filter }` model shaped for text/number/date
+   * operators. A column with its own `floatingFilterComponent` (e.g. a multi-select
+   * "set" dropdown) writes a DIFFERENT model shape, so showing both lets the user pick
+   * an operator the custom component can't honour — a set column offering "Contains" /
+   * "Does not contain" that then behaves as an exact/`in` match. Because of that, the
+   * button is hidden AUTOMATICALLY whenever `floatingFilterComponent` is set; this flag
+   * is the explicit override for any other column that wants only its floating filter.
+   */
+  suppressFilterButton?: boolean;
   floatingFilter?: boolean;
   /**
    * Custom floating-filter component. Can be either:

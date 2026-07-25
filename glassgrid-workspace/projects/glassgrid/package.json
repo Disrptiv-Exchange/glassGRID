@@ -1,7 +1,7 @@
 {
   "name": "@disrptiv-exchange/glassgrid",
-  "version": "0.4.78",
-  "description": "Lightweight Angular data grid — signal-native, tree-shakeable, themeable. 49 KB gzipped with the full feature surface.",
+  "version": "0.4.79",
+  "description": "Lightweight Angular data grid \u2014 signal-native, tree-shakeable, themeable. 49 KB gzipped with the full feature surface.",
   "keywords": [
     "angular",
     "data-grid",
