@@ -579,9 +579,11 @@
           </label>
         }
         <span class="gg-page-info" aria-live="polite">
-          {{ t()('page') }} {{ api.paginationGetCurrentPage() + 1 }} {{ t()('of') }} {{ api.paginationGetTotalPages() }}
-          ·
-          {{ pageRowStart() }} {{ t()('to') }} {{ pageRowEnd() }} {{ t()('of') }} {{ filteredRowCount() }} {{ t()('rows') }}
+          <span class="gg-page-label">{{ t()('page') }} {{ api.paginationGetCurrentPage() + 1 }} {{ t()('of') }} {{ api.paginationGetTotalPages() }}</span>
+          @if (api.paginationGetTotalPages() > 1) {
+            <span class="gg-page-sep">·</span>
+          }
+          <span class="gg-page-range">{{ pageRowStart() }} {{ t()('to') }} {{ pageRowEnd() }} {{ t()('of') }} {{ filteredRowCount() }} {{ t()('rows') }}</span>
           @if (isGridFiltered()) {
             <span class="gg-page-info-filtered">({{ t()('filteredFrom') }} {{ totalRows() }})</span>
           }
