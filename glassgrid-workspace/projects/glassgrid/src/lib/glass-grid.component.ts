@@ -88,6 +88,45 @@ import { toExcelXml, downloadExcel } from './internal/excel-export';
 import { FloatingFilterHostDirective } from './internal/floating-filter-host.directive';
 import { CellNodeDirective } from './internal/cell-node.directive';
 import { CellEditorHostDirective } from './internal/cell-editor-host.directive';
+// v0.4.83 — OverlayScrollbars v2 provides always-visible custom scrollbars.
+// ChromeOS forces its own OS-level overlay scrollbars that fade after ~1s and
+// override `::-webkit-scrollbar` / `scrollbar-width` — verified on the real
+// device in incognito by the consumer app. A JS-drawn bar is the only reliable
+// fix. See the wrapper-DOM comment on ngAfterViewInit for the target/viewport
+// split that keeps the sticky-header architecture working (v0.4.81's config
+// applied the host-flex CSS to `.gg-body` itself and broke the layout).
+import { OverlayScrollbars, type OverlayScrollbars as OverlayScrollbarsInstance } from 'overlayscrollbars';
+import { OVERLAY_SCROLLBARS_CSS } from './overlay-scrollbars-css';
+
+const GG_OS_STYLE_ID = 'gg-os-css';
+const GG_OS_TUNING_CSS = `
+/* glassGRID tuning — beefier, easier-to-grab bar on every machine */
+.gg-osroot .os-scrollbar {
+  --os-size: 14px;
+  --os-padding-perpendicular: 2px;
+  --os-padding-axis: 2px;
+  --os-handle-min-size: 40px;
+  --os-handle-perpendicular-size: 100%;
+  --os-handle-perpendicular-size-hover: 100%;
+  --os-handle-perpendicular-size-active: 100%;
+}
+.gg-osroot .os-theme-dark {
+  --os-handle-bg: rgba(0, 0, 0, 0.55);
+  --os-handle-bg-hover: rgba(0, 0, 0, 0.72);
+  --os-handle-bg-active: rgba(0, 0, 0, 0.88);
+  --os-track-bg: rgba(0, 0, 0, 0.06);
+  --os-track-bg-hover: rgba(0, 0, 0, 0.09);
+  --os-track-bg-active: rgba(0, 0, 0, 0.12);
+}
+`;
+function injectOverlayScrollbarsCss() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(GG_OS_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = GG_OS_STYLE_ID;
+  style.textContent = OVERLAY_SCROLLBARS_CSS + GG_OS_TUNING_CSS;
+  document.head.appendChild(style);
+}
 
 interface RenderColumn<TRow> extends ResolvedColumn<TRow> {
   computedWidth: number;
@@ -1183,6 +1222,22 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       }
     });
 
+    // v0.4.83 — nudge OverlayScrollbars after every virtual-scroll re-render.
+    // OS auto-observes size changes via its own ResizeObserver, but virtual
+    // scrolling swaps ROW DOM nodes while the outer canvas dimensions
+    // (`bodyTotalHeight` × `totalContentWidth`) can stay identical, so a fast
+    // page/filter/sort change can leave the scrollbar thumb geometry a frame
+    // stale. `update()` is cheap and idempotent; deferred to a microtask so
+    // Angular has committed the DOM changes for this tick first.
+    effect(() => {
+      this.pagedRows();
+      this.bodyTotalHeight();
+      this.totalContentWidth();
+      untracked(() => {
+        if (this.osInstance) queueMicrotask(() => this.osInstance?.update());
+      });
+    });
+
 
     // datasource attachment effect: when consumer calls gridApi.setGridOption('datasource', ds),
     // fetch the appropriate slice immediately (ag-grid behaviour).
@@ -1508,7 +1563,17 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   }
 
   @ViewChild('viewport') viewportRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('osroot') osRootRef?: ElementRef<HTMLDivElement>;
   private viewportResizeObserver: ResizeObserver | null = null;
+  /**
+   * OverlayScrollbars v2 instance. Null before ngAfterViewInit runs and after
+   * ngOnDestroy tears it down. See ngAfterViewInit for the target/viewport
+   * split (target = `.gg-osroot`, viewport = `.gg-body`) that lets OS decorate
+   * its host with `display: flex` without touching the sticky-header stack
+   * inside `.gg-body`.
+   */
+  private osInstance: OverlayScrollbarsInstance | null = null;
+  private osAutoHideObserver: MutationObserver | null = null;
 
   @HostListener('window:resize') onWindowResize() { this.measureViewport(); }
   ngAfterViewInit() {
@@ -1521,10 +1586,62 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       this.viewportResizeObserver = new ResizeObserver(() => this.measureViewport());
       this.viewportResizeObserver.observe(vp);
     }
+    // v0.4.83 — Attach OverlayScrollbars.
+    //
+    // KEY ARCHITECTURAL POINT (fixes v0.4.81):
+    // target = `.gg-osroot` (the wrapper element inside `.gg-main`), NOT `.gg-body`.
+    // elements.viewport = `.gg-body` (the actual scroll viewport with sticky headers).
+    //
+    // Why the split matters — OverlayScrollbars decorates its `target` with a
+    // `data-overlayscrollbars=host` attribute that triggers `display: flex;
+    // flex-direction: row !important` in OS's own stylesheet (see lines 171-178
+    // of `node_modules/overlayscrollbars/styles/overlayscrollbars.css`). If we
+    // applied that to `.gg-body` (as v0.4.81 did with target === viewport), our
+    // vertical stack of sticky-header rows + row canvas + pinned-bottom rows
+    // would reflow into a HORIZONTAL flex row — total layout destruction.
+    //
+    // The wrapper `.gg-osroot` has ONLY ONE child (`.gg-body`) so the flex-row
+    // layout is fine: the child stretches to fill it (align-items: stretch is
+    // OS's default) and stays a normal block element hosting the sticky stack.
+    //
+    // scrollbars.autoHide === 'never' + visibility === 'visible' is what makes
+    // the bar stay on screen forever — even on ChromeOS which fades native
+    // overlay scrollbars regardless of `::-webkit-scrollbar` styling.
+    const osRoot = this.osRootRef?.nativeElement;
+    if (osRoot && vp && typeof window !== 'undefined') {
+      injectOverlayScrollbarsCss();
+      this.osInstance = OverlayScrollbars(
+        { target: osRoot, elements: { viewport: vp } },
+        {
+          scrollbars: {
+            visibility: 'visible',
+            autoHide: 'never',
+            theme: 'os-theme-dark',
+          },
+          overflow: { x: 'scroll', y: 'scroll' },
+        },
+      );
+      const stripAutoHideMarker = () => {
+        osRoot.querySelectorAll('.os-scrollbar-auto-hide').forEach((el) => {
+          el.classList.remove('os-scrollbar-auto-hide');
+        });
+      };
+      queueMicrotask(stripAutoHideMarker);
+      this.osAutoHideObserver = new MutationObserver(stripAutoHideMarker);
+      this.osAutoHideObserver.observe(osRoot, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class'],
+      });
+    }
   }
   ngOnDestroy() {
     this.viewportResizeObserver?.disconnect();
     this.viewportResizeObserver = null;
+    this.osAutoHideObserver?.disconnect();
+    this.osAutoHideObserver = null;
+    this.osInstance?.destroy();
+    this.osInstance = null;
     for (const p of this.floatingFilterPending.values()) clearTimeout(p.timer);
     this.floatingFilterPending.clear();
   }

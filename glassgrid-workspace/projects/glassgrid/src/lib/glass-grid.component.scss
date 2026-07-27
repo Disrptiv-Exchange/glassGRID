@@ -4,6 +4,10 @@
 // #329B2A on near-white / dark surfaces, Montserrat, 16–20px radii). Override
 // any --gg-* variable from your own styles to retheme.
 
+// v0.4.83 — OverlayScrollbars v2 CSS is injected globally at runtime from
+// overlay-scrollbars-css.ts so Angular ViewEncapsulation cannot scope its
+// selectors away from the OS-injected DOM.
+
 
 :host {
   // ---- palette (glassRUN) ----
@@ -995,6 +999,21 @@
 }
 
 // body
+// v0.4.83 — .gg-osroot is the OverlayScrollbars "host" wrapper that lives
+// between .gg-main and .gg-body. OS's own stylesheet turns hosts into a
+// flex-row container (see comment in glass-grid.component.ts.ngAfterViewInit).
+// We give the wrapper `min-width: 0; min-height: 0` so it inherits the 1fr
+// row height from .gg-main's grid template without expanding past it, and
+// `position: relative` so any OS scrollbar tracks that use absolute
+// positioning resolve against the wrapper (not a distant ancestor). The
+// single child (.gg-body) stretches to fill via OS's `align-items: stretch`.
+.gg-osroot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
 .gg-body { position: relative; overflow: auto; outline: none; }
 .gg-body:focus-visible { box-shadow: inset 0 0 0 2px var(--gg-focus-ring); }
 // v0.4.78: min-height: 100% removed. Previously the canvas was forced to be

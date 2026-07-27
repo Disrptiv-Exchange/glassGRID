@@ -74,7 +74,17 @@
       the header, filter and pinned rows all move in the same paint frame as
       the body content, so there is no drag-scroll jitter regardless of
       main-thread load.
+
+      v0.4.83: `.gg-osroot` wraps `.gg-body` so OverlayScrollbars can attach
+      to the outer wrapper as its "host" element (which OS decorates with a
+      flex layout for its own scrollbar tracks) while `.gg-body` remains the
+      scroll viewport with its block layout intact — that block layout is
+      what the v0.4.75 sticky-header stack relies on. Without the wrapper,
+      OS would apply `display: flex; flex-direction: row !important` to the
+      SAME element that hosts our sticky rows, reorienting them into a
+      horizontal strip and breaking every layout invariant (v0.4.81 bug).
     -->
+    <div class="gg-osroot" #osroot>
     <div
       #viewport
       class="gg-body"
@@ -528,6 +538,7 @@
     }
 
     </div><!-- /.gg-body (the outer scroll container) -->
+    </div><!-- /.gg-osroot (OverlayScrollbars host wrapper) -->
 
     <!-- left pin drop zone: absolute-positioned overlay only visible while
          dragging a column. Positioned outside the scroll container so it
