@@ -3,8 +3,5 @@
   "dest": "../../dist/glassgrid",
   "lib": {
     "entryFile": "src/public-api.ts"
-  },
-  "allowedNonPeerDependencies": [
-    "overlayscrollbars"
-  ]
+  }
 }

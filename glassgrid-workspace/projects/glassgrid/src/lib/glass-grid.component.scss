@@ -4,15 +4,6 @@
 // #329B2A on near-white / dark surfaces, Montserrat, 16–20px radii). Override
 // any --gg-* variable from your own styles to retheme.
 
-// v0.4.80 — OverlayScrollbars stylesheet.
-// Loaded via the tilde-prefix node-modules resolver that ng-packagr's SCSS
-// pipeline understands. This provides the DOM styling for the JS-drawn
-// scrollbars that replace the OS-hidden native ones (Chrome OS specifically
-// forces native scrollbars to fade regardless of `::-webkit-scrollbar` rules
-// or `overflow: scroll`, so a JS scrollbar is the only reliable fix). The
-// stylesheet is <2 KB gzipped and self-contained under the `.os-*` selector
-// namespace — it does not affect anything outside the grid.
-@import "overlayscrollbars/overlayscrollbars.css";
 
 :host {
   // ---- palette (glassRUN) ----

@@ -88,14 +88,6 @@ import { toExcelXml, downloadExcel } from './internal/excel-export';
 import { FloatingFilterHostDirective } from './internal/floating-filter-host.directive';
 import { CellNodeDirective } from './internal/cell-node.directive';
 import { CellEditorHostDirective } from './internal/cell-editor-host.directive';
-// v0.4.80 — OverlayScrollbars v2 provides always-visible custom scrollbars that
-// the OS cannot auto-hide. Chrome OS in particular overrides `::-webkit-scrollbar`
-// styles and fades native scrollbars regardless of CSS, so a JS-drawn scrollbar
-// is the only reliable way to make the grid's scroll indicator persistently
-// visible on Chromebook. Configured with `elements.viewport = self` so the
-// existing `.gg-body` element remains the actual scroller — this preserves the
-// sticky-header architecture from v0.4.75.
-import { OverlayScrollbars, type OverlayScrollbars as OverlayScrollbarsInstance } from 'overlayscrollbars';
 
 interface RenderColumn<TRow> extends ResolvedColumn<TRow> {
   computedWidth: number;
@@ -1191,25 +1183,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       }
     });
 
-    // v0.4.80 — OverlayScrollbars.update() after every virtual-scroll render.
-    //
-    // OverlayScrollbars auto-observes size changes via ResizeObserver, but
-    // virtual scrolling in glassgrid swaps ROW DOM nodes without necessarily
-    // changing the outer canvas size (the `.gg-body-canvas` has a fixed height
-    // = `bodyTotalHeight`). If we don't nudge OS on every re-render, the
-    // scrollbar thumb geometry can go momentarily stale after a fast scroll
-    // or filter/sort/page change. Cheap to call and idempotent — OS re-checks
-    // scroll extents and re-lays the thumb. Deferred to a microtask so it
-    // runs AFTER Angular has committed the DOM changes for this tick.
-    effect(() => {
-      // Track everything that affects the scrollable geometry.
-      this.pagedRows();
-      this.bodyTotalHeight();
-      this.totalContentWidth();
-      untracked(() => {
-        if (this.osInstance) queueMicrotask(() => this.osInstance?.update());
-      });
-    });
 
     // datasource attachment effect: when consumer calls gridApi.setGridOption('datasource', ds),
     // fetch the appropriate slice immediately (ag-grid behaviour).
@@ -1536,14 +1509,6 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   @ViewChild('viewport') viewportRef?: ElementRef<HTMLDivElement>;
   private viewportResizeObserver: ResizeObserver | null = null;
-  /**
-   * OverlayScrollbars v2 instance managing the `.gg-body` viewport. Null when
-   * not yet initialised (before ngAfterViewInit) or already destroyed. The
-   * `.update()` method is called from an effect further down (see the
-   * `osUpdateEffect` in the constructor) whenever data / column / page state
-   * changes so the scrollbar thumb geometry tracks virtual-scroll re-renders.
-   */
-  private osInstance: OverlayScrollbarsInstance | null = null;
 
   @HostListener('window:resize') onWindowResize() { this.measureViewport(); }
   ngAfterViewInit() {
@@ -1556,41 +1521,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       this.viewportResizeObserver = new ResizeObserver(() => this.measureViewport());
       this.viewportResizeObserver.observe(vp);
     }
-    // v0.4.80 — Attach OverlayScrollbars to the .gg-body viewport with
-    // `elements.viewport = vp` so the existing element remains the actual
-    // scroller. This is CRITICAL for two reasons:
-    //   1. Sticky headers (v0.4.75): the .gg-header / .gg-floating-filter-row /
-    //      .gg-pinned-top rows are `position: sticky` inside `.gg-body`. If OS
-    //      wrapped the viewport in an extra scroller container, the sticky
-    //      anchors would resolve to the wrong element and stop working.
-    //   2. onBodyScroll handler + virtual scrolling: our scrollLeft / scrollTop
-    //      signals + the (scroll) event binding both target the .gg-body
-    //      element directly; the same element continues to fire the native
-    //      scroll event, so nothing else in the grid needs to know OS exists.
-    // `autoHide: 'never'` + `visibility: 'visible'` is the whole point of this
-    // fix — even on ChromeOS where OS-level overlay scrollbars auto-hide, this
-    // guarantees the scrollbar thumb stays on screen at all times.
-    if (vp && typeof window !== 'undefined') {
-      this.osInstance = OverlayScrollbars(
-        { target: vp, elements: { viewport: vp } },
-        {
-          scrollbars: {
-            visibility: 'visible',
-            autoHide: 'never',
-            theme: 'os-theme-dark',
-          },
-          overflow: { x: 'scroll', y: 'scroll' },
-        },
-      );
-    }
   }
   ngOnDestroy() {
     this.viewportResizeObserver?.disconnect();
     this.viewportResizeObserver = null;
-    // Tear down OverlayScrollbars so its injected DOM + listeners don't leak
-    // when the grid component is destroyed.
-    this.osInstance?.destroy();
-    this.osInstance = null;
     for (const p of this.floatingFilterPending.values()) clearTimeout(p.timer);
     this.floatingFilterPending.clear();
   }
