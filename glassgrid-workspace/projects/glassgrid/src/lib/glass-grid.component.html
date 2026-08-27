@@ -85,11 +85,14 @@
       horizontal strip and breaking every layout invariant (v0.4.81 bug).
     -->
     <div class="gg-osroot" #osroot>
+    <!-- No (scroll) binding on .gg-body on purpose. A template event binding is
+         zone-patched, so every scroll event ran a full app-wide change detection
+         pass and fast scrolling went white. The listener is registered in
+         ngAfterViewInit outside the Angular zone instead — see onBodyScroll. -->
     <div
       #viewport
       class="gg-body"
       tabindex="0"
-      (scroll)="onBodyScroll($event)"
       [attr.aria-busy]="loading() ? 'true' : null"
     >
 
