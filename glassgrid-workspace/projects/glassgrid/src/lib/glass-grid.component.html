@@ -85,11 +85,15 @@
       horizontal strip and breaking every layout invariant (v0.4.81 bug).
     -->
     <div class="gg-osroot" #osroot>
+    <!-- No (scroll) binding here on purpose. A template event binding is patched by
+         zone.js, so every scroll event ran a full application-wide change detection
+         pass (~90 ms each, 83-86% main thread blocked), which is what made the
+         OverlayScrollbars thumb stutter. The listener is registered in
+         ngAfterViewInit outside the Angular zone instead — see onBodyScroll. -->
     <div
       #viewport
       class="gg-body"
       tabindex="0"
-      (scroll)="onBodyScroll($event)"
       [attr.aria-busy]="loading() ? 'true' : null"
     >
 

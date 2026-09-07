@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   HostListener,
+  NgZone,
   ViewChild,
   computed,
   effect,
@@ -367,6 +369,14 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   readonly fullWidthCellRenderer = input<((row: TRow) => string | Node) | null>(null);
   readonly isFullWidthRow = input<((row: TRow) => boolean) | null>(null);
   readonly suppressRowVirtualisation = input(false);
+
+  /**
+   * At or below this many rows the grid renders every row and skips windowing
+   * entirely. Set to twice the largest page size the pagination selector offers
+   * (100), so every paginated grid renders in full and only genuinely large
+   * client-side sets pay for virtualisation. See visibleRowRange.
+   */
+  private static readonly VIRTUALISATION_ROW_THRESHOLD = 200;
   readonly suppressColumnVirtualisation = input(true);
   readonly print = input(false);
 
@@ -400,6 +410,10 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   // ===== internal state =====
   private readonly el = inject(ElementRef<HTMLElement>);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly zone = inject(NgZone);
+  private readonly cdr = inject(ChangeDetectorRef);
+  /** Set in ngOnDestroy so a scroll event still in flight cannot render a dead view. */
+  private viewDestroyed = false;
 
   // ag-grid drop-in mirrors
   protected readonly loadingOverlayInternal = signal(false);
@@ -423,6 +437,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   private readonly viewportHeight = signal(400);
   private readonly viewportWidth = signal(1000);
   private readonly scrollTop = signal(0);
+  /**
+   * Signed pixels travelled since the previous scroll event; positive = downward.
+   * Feeds the predictive half of the row buffer in visibleRowRange.
+   */
+  private readonly scrollDelta = signal(0);
   /** Exposed to template so header + floating-filter row can translate by -scrollLeft to track body scroll. */
   protected readonly scrollLeft = signal(0);
 
@@ -739,15 +758,42 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   protected readonly serverSideRows = signal<TRow[]>([]);
   protected readonly serverSideTotal = signal<number | null>(null);
 
+  /**
+   * True when the quick-filter box has text in it. Broken out because both
+   * filteredNodes and filteredRowCount need to know, and the footer count is
+   * wrong unless the two agree.
+   */
+  readonly hasQuickFilter = computed(() =>
+    ((this.internalQuickFilter() || this.quickFilterText()) ?? '').trim().length > 0);
+
   readonly filteredNodes = computed<RowNode<TRow>[]>(() => {
     const all = this.orderedNodes();
     const rm = this.rowModelType();
-    if (rm === 'infinite' || rm === 'serverSide' || rm === 'viewport') {
-      // Server already filtered; client must not re-filter (would hide
-      // rows from unfetched blocks).
-      return all;
-    }
     const q = this.internalQuickFilter() || this.quickFilterText();
+
+    if (rm === 'infinite' || rm === 'serverSide' || rm === 'viewport') {
+      // COLUMN filters are forwarded to the server (the datasource effect
+      // re-fetches on filterModel), so re-applying them here would double-filter
+      // and hide rows from blocks that were never fetched. They stay server-side.
+      //
+      // The QUICK filter is different: it is not, and never has been, sent to the
+      // server. The datasource effect reads filterModel and sortModel but not the
+      // quick-filter text, so before this it matched nothing anywhere — the box
+      // accepted input and the grid ignored it on every server-backed grid, which
+      // is all but four of them.
+      //
+      // So it is applied here, against the rows currently loaded. On a paginated
+      // server grid that is the fetched page, which means quick filter narrows
+      // what is on screen rather than searching the whole result set. That is the
+      // agreed behaviour: instant, no backend change, and consistent with the box
+      // sitting directly above the rows it filters. Searching every page needs the
+      // term plumbed into getRows and into the stored procedures behind it.
+      //
+      // 'viewport' is included deliberately — it holds a loaded window too, so
+      // filtering that window behaves the same way.
+      return q ? applyQuickFilter(all, q, this.visibleColumns().map((c) => c.colDef)) : all;
+    }
+
     const visibleColDefs = this.visibleColumns().map((c) => c.colDef);
     const quickFiltered = applyQuickFilter(all, q, visibleColDefs);
     return applyColumnFilters(quickFiltered, this.filterModel(), this.colDefById());
@@ -865,7 +911,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
   /** Filtered row count (excluding pinned rows). Equals totalRows when no filter applied. */
   readonly filteredRowCount = computed(() => {
-    if (this.isServerSidePaginated()) return this.serverSideTotal() ?? 0;
+    if (this.isServerSidePaginated()) {
+      // Normally the server's total is authoritative. But a quick filter narrows
+      // the loaded page on the client, and the server knows nothing about it — so
+      // reporting the server total here would print "1 to 50 of 127 rows" under a
+      // grid showing three. Once a quick filter is active the honest denominator
+      // is what is actually on screen.
+      if (this.hasQuickFilter()) return this.displayedRows().filter((r) => !r.pinned).length;
+      return this.serverSideTotal() ?? 0;
+    }
     return this.displayedRows().filter((r) => !r.pinned).length;
   });
 
@@ -877,6 +931,11 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     if (!this.pagination()) return this.filteredRowCount() === 0 ? 0 : 1;
     const total = this.filteredRowCount();
     if (total === 0) return 0;
+    // A quick filter on a server-paged grid narrows the loaded page, and the
+    // matches are then the entire visible set — so the range restarts at 1. The
+    // page-offset arithmetic below would otherwise read "51 to 3 of 3" when
+    // filtering while on page 2.
+    if (this.isServerSidePaginated() && this.hasQuickFilter()) return 1;
     const size = this.effectivePageSize();
     const page = Math.min(this.currentPage(), this.totalPages() - 1);
     return page * size + 1;
@@ -887,6 +946,9 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const total = this.filteredRowCount();
     if (total === 0) return 0;
     if (!this.pagination()) return total;
+    // Pairs with pageRowStart above: every match is on screen, so the range ends
+    // at the match count rather than at the page boundary.
+    if (this.isServerSidePaginated() && this.hasQuickFilter()) return total;
     const size = this.effectivePageSize();
     const page = Math.min(this.currentPage(), this.totalPages() - 1);
     return Math.min((page + 1) * size, total);
@@ -944,12 +1006,56 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     const { tops } = this.rowOffsets();
     const total = tops.length;
     if (this.suppressRowVirtualisation()) return { start: 0, end: total };
+
+    // Small row sets are rendered in full — no windowing, so scrolling never has
+    // to build a row and there is nothing to be late with.
+    //
+    // Virtualisation only earns its keep when the row count vastly exceeds what
+    // fits on screen. A paginated grid loads one page — 50 rows by default, 100 at
+    // the largest page size the selector offers — against a viewport showing about
+    // ten. Windowing that saves a few dozen row elements and buys, in exchange, a
+    // DOM update on every scroll event: the compositor moves the canvas
+    // immediately, the new rows are built a frame or more later, and the gap
+    // between the two is the white band users reported. Rendering all 50 up front
+    // removes the failure mode rather than narrowing the window in which it
+    // happens, which is what buffer tuning does.
+    //
+    // 200 is twice the largest page size, so every paginated grid lands here.
+    // Genuinely large client-side sets stay virtualised and keep the buffer logic
+    // below, where the trade is worth making.
+    if (total <= GlassGridComponent.VIRTUALISATION_ROW_THRESHOLD) return { start: 0, end: total };
     const vh = this.viewportHeight();
     const top = this.scrollTop();
+
+    // Rows kept rendered outside the visible band.
+    //
+    // This was a fixed 3 rows above / 6 below — 108 px and 216 px at the default
+    // 36 px row height. Measured on a real grid with real wheel input, a scroll
+    // travels 364 px per frame on average and 400 px at peak, so EVERY frame moved
+    // further than the whole buffer. The compositor scrolls the canvas the instant
+    // the wheel turns; the rendered window can only follow on the next scroll
+    // event. Whatever distance is travelled beyond the buffer is bare canvas —
+    // white at the leading edge, and the faster the scroll the wider the band.
+    // That matches the reported symptom exactly: white below when scrolling up,
+    // above when scrolling down, growing with speed.
+    //
+    // Base is now a full viewport on each side, which covers the measured
+    // 364 px/frame outright at any normal window size.
+    const base = Math.max(vh, this.rowHeight() * 6);
+
+    // Predictive half. A fixed buffer of ANY size can still be outrun by a hard
+    // flick, so the leading edge is extended by the distance just travelled.
+    // Capped at two viewports so a violent gesture cannot ask for an unbounded
+    // number of rows. Relaxes back to `base` when scrolling stops.
+    const delta = this.scrollDelta();
+    const lead = Math.min(Math.abs(delta) * 2, vh * 2);
+    const bufferUp = base + (delta < 0 ? lead : 0);
+    const bufferDown = base + (delta > 0 ? lead : 0);
+
     let start = 0;
-    while (start < total && (tops[start + 1] ?? Infinity) < top - this.rowHeight() * 3) start++;
+    while (start < total && (tops[start + 1] ?? Infinity) < top - bufferUp) start++;
     let end = start;
-    const limit = top + vh + this.rowHeight() * 6;
+    const limit = top + vh + bufferDown;
     while (end < total && tops[end]! < limit) end++;
     return { start: Math.max(0, start - 3), end: Math.min(total, end + 3) };
   });
@@ -1586,6 +1692,15 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
       this.viewportResizeObserver = new ResizeObserver(() => this.measureViewport());
       this.viewportResizeObserver.observe(vp);
     }
+    // Scroll is listened to here, outside the Angular zone, instead of through a
+    // `(scroll)` binding in the template — see onBodyScroll for why. passive:true
+    // because the handler never calls preventDefault, which lets the compositor
+    // scroll without waiting on it.
+    if (vp) {
+      this.zone.runOutsideAngular(() => {
+        vp.addEventListener('scroll', this.onBodyScrollListener, { passive: true });
+      });
+    }
     // v0.4.83 — Attach OverlayScrollbars.
     //
     // KEY ARCHITECTURAL POINT (fixes v0.4.81):
@@ -1636,6 +1751,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     }
   }
   ngOnDestroy() {
+    this.viewDestroyed = true;
+    this.viewportRef?.nativeElement.removeEventListener('scroll', this.onBodyScrollListener);
+    if (this.scrollEndTimer) {
+      clearTimeout(this.scrollEndTimer);
+      this.scrollEndTimer = null;
+    }
     this.viewportResizeObserver?.disconnect();
     this.viewportResizeObserver = null;
     this.osAutoHideObserver?.disconnect();
@@ -1654,10 +1775,41 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   }
 
   private scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Bound reference so add/removeEventListener see the same function.
+   * Registered in ngAfterViewInit via zone.runOutsideAngular — see there.
+   */
+  private readonly onBodyScrollListener = (ev: Event) => this.onBodyScroll(ev);
+
+  /**
+   * Body scroll handler.
+   *
+   * Registered manually OUTSIDE the Angular zone rather than through a
+   * `(scroll)` binding in the template. A template event binding is patched by
+   * zone.js, so every scroll event scheduled a full application-wide change
+   * detection pass — the whole host app, not just this grid. Measured on a real
+   * page: the handler body costs 2 ms across an entire flick, while the change
+   * detection it triggered cost ~90 ms PER SCROLL EVENT and left the main thread
+   * 83-86% blocked for the duration of the gesture.
+   *
+   * The visible symptom was a stuttering scrollbar. Content scrolls on the
+   * compositor and stayed smooth, but the OverlayScrollbars thumb is positioned
+   * by JavaScript on the main thread, so it fell behind those passes and appeared
+   * to jump.
+   *
+   * Change detection is now re-entered only when the rendered window actually
+   * moved. For a grid under the render-everything threshold that is never — the
+   * window is a constant 0..n — so scrolling such a grid costs nothing at all.
+   */
   onBodyScroll(ev: Event) {
     const el = ev.target as HTMLDivElement;
     const scrollLeft = el.scrollLeft;
     const scrollTop = el.scrollTop;
+    // Snapshot BEFORE the signal writes so the two can be compared afterwards.
+    // Both are computed signals, so these reads are cache hits.
+    const prevRange = this.visibleRowRange();
+    const prevColumns = this.renderedColumns();
     // v0.4.75: no JS transform writes are needed on scroll. The header rows,
     // floating-filter row, and pinned-left header cells all live INSIDE the
     // same scroll container as the body and are `position: sticky`, so the
@@ -1665,11 +1817,51 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // body — no main-thread work required and no frame lag possible.
     // We still update the scrollLeft / scrollTop signals for consumer
     // callbacks and column-virtualisation logic.
+    // Recorded BEFORE scrollTop is overwritten so visibleRowRange sees the travel
+    // that produced this event and can extend its leading edge to match.
+    this.scrollDelta.set(scrollTop - this.scrollTop());
     this.scrollTop.set(scrollTop);
     this.scrollLeft.set(scrollLeft);
+    // Stays outside the zone: it fires on every scroll event, so re-entering here
+    // would reinstate exactly the per-event change detection this handler exists to
+    // remove. bodyScrollEnd below is debounced and DOES re-enter, so a consumer
+    // that updates state from scrolling can do it there and still get rendered.
     this.bodyScroll.emit({ top: scrollTop, left: scrollLeft });
+
+    // Render only when the rendered window actually moved.
+    //
+    // detectChanges(), NOT zone.run(). An earlier attempt at this fix used
+    // `this.zone.run(() => {})` on the assumption that re-entering the zone
+    // schedules a tick. It does not: NgZone.checkStable() only emits
+    // onMicrotaskEmpty when the zone was already unstable, so re-entering an idle
+    // zone with no work does nothing whatsoever. Rows then only repainted when the
+    // 150 ms bodyScrollEnd timer fired — and that timer is cleared and rescheduled
+    // on every scroll event, so during a sustained scroll it never fired at all and
+    // the row area stayed empty for the whole gesture. detectChanges renders this
+    // component synchronously, needs no zone, and cannot be starved by a debounce.
+    const nextRange = this.visibleRowRange();
+    const nextColumns = this.renderedColumns();
+    if (
+      !this.viewDestroyed &&
+      (nextRange.start !== prevRange.start ||
+        nextRange.end !== prevRange.end ||
+        nextColumns !== prevColumns)
+    ) {
+      this.cdr.detectChanges();
+    }
+
     if (this.scrollEndTimer) clearTimeout(this.scrollEndTimer);
-    this.scrollEndTimer = setTimeout(() => this.bodyScrollEnd.emit({ top: scrollTop, left: scrollLeft }), 150);
+    // Scheduled outside the zone, so the callback re-enters explicitly — otherwise
+    // a consumer's bodyScrollEnd handler would run with no change detection behind
+    // it, which would be a behaviour change.
+    this.scrollEndTimer = setTimeout(
+      () => this.zone.run(() => {
+        // Drop the predictive part of the row buffer now that scrolling has stopped.
+        this.scrollDelta.set(0);
+        this.bodyScrollEnd.emit({ top: scrollTop, left: scrollLeft });
+      }),
+      150,
+    );
   }
 
   // ===== header interactions (sort / resize / drag / filter button) =====
