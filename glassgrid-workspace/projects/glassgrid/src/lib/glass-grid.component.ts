@@ -72,7 +72,7 @@ import { resolveColumns, type ResolvedColumn } from './internal/resolve-column';
 import { formatCellValue, getCellValue } from './internal/value';
 import { sortRows, nextSortDirection } from './internal/sort';
 import { applyQuickFilter } from './internal/filter';
-import { applyColumnFilters, DATE_OPS, FILTER_OP_LABELS, NUMBER_OPS, TEXT_OPS, resolveFilterType } from './internal/column-filter';
+import { applyColumnFilters, DATE_OP_LABELS, DATE_OPS, FILTER_OP_LABELS, NUMBER_OPS, TEXT_OPS, resolveFilterOps, resolveFilterType } from './internal/column-filter';
 import { aggregate } from './internal/aggregation';
 import {
   buildGroupTree,
@@ -1992,8 +1992,13 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // (ag-grid does the same denormalise-on-open).
     const draft = { ...item };
     if (resolveFilterType(col.colDef.filter) === 'date') {
-      if (draft.dateFrom != null && draft.filter == null) draft.filter = draft.dateFrom;
-      if (draft.dateTo != null && draft.filterTo == null) draft.filterTo = draft.dateTo;
+      // Coerce to YYYY-MM-DD on the way in: the popup's `<input type="date">`
+      // and its dd/mm/yyyy text twin only understand that spelling, and a
+      // custom floating filter may well have written a full Date-stamp string
+      // ('Mon Oct 06 2026 00:00:00 GMT+0530 ...'), which would otherwise land
+      // in the popup verbatim.
+      if (draft.dateFrom != null && draft.filter == null) draft.filter = this.toIsoDateString(draft.dateFrom);
+      if (draft.dateTo != null && draft.filterTo == null) draft.filterTo = this.toIsoDateString(draft.dateTo);
     }
     this.draftFilter.set(draft);
     // Anchor the popup just below the clicked filter button (or its header cell), relative to the grid host.
@@ -2011,6 +2016,20 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     }
     this.openFilterColId.set(this.openFilterColId() === col.colId ? null : col.colId);
   }
+  /**
+   * Narrow any parseable date value to `YYYY-MM-DD`. Values that aren't dates
+   * are returned untouched so nothing is silently destroyed.
+   */
+  private toIsoDateString(v: string | number | null): string | number | null {
+    if (v == null || v === '') return v;
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const t = new Date(v).getTime();
+    if (isNaN(t)) return v;
+    const d = new Date(t);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
   defaultFilterDraft(col: ResolvedColumn<TRow>): FilterModelItem {
     const type = resolveFilterType(col.colDef.filter);
     if (type === 'number') return { type: 'equals', filter: null };
@@ -2019,11 +2038,50 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   }
   filterOpsFor(col: ResolvedColumn<TRow>): FilterOp[] {
     const t = resolveFilterType(col.colDef.filter);
-    if (t === 'number') return NUMBER_OPS;
-    if (t === 'date') return DATE_OPS;
-    return TEXT_OPS;
+    const base = t === 'number' ? NUMBER_OPS : t === 'date' ? DATE_OPS : TEXT_OPS;
+    return resolveFilterOps(base, col.colDef.filterParams?.filterOptions);
   }
-  filterOpLabel(op: FilterOp): string { return FILTER_OP_LABELS[op] ?? op; }
+  /**
+   * Label for an operator in the filter popup. `col` is optional for backwards
+   * compatibility; pass it to get the column-aware label -- a `displayName`
+   * from `filterParams.filterOptions` when the column declared one, then the
+   * date-specific naming (Before / After / Between), then the shared default.
+   */
+  filterOpLabel(op: FilterOp, col?: ResolvedColumn<TRow>): string {
+    const opts = col?.colDef.filterParams?.filterOptions;
+    if (opts) {
+      for (const entry of opts) {
+        if (typeof entry !== 'string' && entry?.displayKey === op && entry.displayName) {
+          return entry.displayName;
+        }
+      }
+    }
+    if (col && resolveFilterType(col.colDef.filter) === 'date' && DATE_OP_LABELS[op]) {
+      return DATE_OP_LABELS[op];
+    }
+    return FILTER_OP_LABELS[op] ?? op;
+  }
+
+  /**
+   * Whether to draw the header filter-menu (funnel) button for a column.
+   *
+   * The button is hidden for columns that supply their own
+   * `floatingFilterComponent`, because a set/dropdown floating filter writes a
+   * model shape the generic popup can't express -- offering "Contains" for a
+   * multi-select column would lie about what happens.
+   *
+   * Date columns are the exception. Their custom floating filter writes the
+   * same `{ filterType: 'date', type, dateFrom, dateTo }` shape the popup
+   * does, so the two stay in sync, and the popup is the only place the
+   * Before / After / Between operators fit: a floating-filter row is far too
+   * narrow for an operator picker plus two date inputs. `suppressFilterButton`
+   * still overrides this for any column that wants the floating filter alone.
+   */
+  showFilterButton(col: ResolvedColumn<TRow>): boolean {
+    if (!col.colDef.filter || col.colDef.suppressFilterButton) return false;
+    if (!this.floatingFilterComponentType(col)) return true;
+    return resolveFilterType(col.colDef.filter) === 'date';
+  }
 
   applyDraftFilter(col: ResolvedColumn<TRow>) {
     const item = this.draftFilter();
@@ -2032,17 +2090,29 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
 
     const isBlankOp = item.type === 'blank' || item.type === 'notBlank';
     const hasValue = item.filter != null && item.filter !== '';
+    // A two-bound operator with only one bound filled is not a filter yet.
+    // Applying it anyway sends a half-open range downstream -- harmless for the
+    // built-in client-side matchers, which bail on a missing upper bound, but a
+    // server-side datasource maps the model straight into a query and would get
+    // a range with no end. ag-grid holds the filter back the same way.
+    const needsUpperBound = item.type === 'inRange' && (item.filterTo == null || item.filterTo === '');
 
-    if (!hasValue && !isBlankOp) {
+    if ((!hasValue || needsUpperBound) && !isBlankOp) {
       delete m[col.colId];
     } else {
       let normalised: import('./types').FilterModelItem;
       if (ft === 'date') {
+        // Key ORDER matters, not just the keys. ag-grid's DateFilter.createCondition()
+        // returns `{ dateFrom, dateTo, filterType, type }` -- dates before type --
+        // and host apps written against ag-grid walk the model with
+        // `Object.keys(model).forEach(...)`, letting a later key overwrite what an
+        // earlier one set. Emitting `type` first silently inverts that precedence and
+        // corrupts the derived query. Match ag-grid's order exactly.
         normalised = {
-          filterType: 'date',
-          type: item.type,
           dateFrom: item.filter == null ? null : String(item.filter),
           dateTo: item.type === 'inRange' && item.filterTo != null ? String(item.filterTo) : null,
+          filterType: 'date',
+          type: item.type,
         };
       } else if (ft === 'number') {
         normalised = {
@@ -2176,11 +2246,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
         } else {
           dateFrom = String(value);
         }
+        // Same ag-grid key order as applyDraftFilter() -- see the note there.
         m[col.colId] = {
-          filterType: 'date',
-          type: type as import('./types').FilterOp,
           dateFrom,
           dateTo,
+          filterType: 'date',
+          type: type as import('./types').FilterOp,
         };
       } else {
         const coerced = ft === 'number' ? Number(value) : (value as string | number);

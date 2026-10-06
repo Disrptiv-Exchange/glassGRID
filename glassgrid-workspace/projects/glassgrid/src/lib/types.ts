@@ -134,8 +134,11 @@ export interface ColumnDef<TRow = unknown, TValue = unknown> {
    * "set" dropdown) writes a DIFFERENT model shape, so showing both lets the user pick
    * an operator the custom component can't honour — a set column offering "Contains" /
    * "Does not contain" that then behaves as an exact/`in` match. Because of that, the
-   * button is hidden AUTOMATICALLY whenever `floatingFilterComponent` is set; this flag
-   * is the explicit override for any other column that wants only its floating filter.
+   * button is hidden AUTOMATICALLY whenever `floatingFilterComponent` is set -- with one
+   * exception: DATE columns keep it, because a date floating filter writes the same
+   * `{filterType:'date', type, dateFrom, dateTo}` model the popup does, and the popup is
+   * the only place the Before / After / Between operators fit. This flag is the explicit
+   * override for any column (date ones included) that wants only its floating filter.
    */
   suppressFilterButton?: boolean;
   floatingFilter?: boolean;

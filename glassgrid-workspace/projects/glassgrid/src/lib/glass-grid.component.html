@@ -187,11 +187,12 @@
                 }
               </span>
             }
-            <!-- The generic filter-menu popup is hidden when the column supplies its own
-                 floating-filter component (that component owns filtering and writes a
-                 different model shape — showing both offers operators it can't honour),
-                 or when suppressFilterButton is explicitly set. -->
-            @if (col.colDef.filter && !col.colDef.suppressFilterButton && !floatingFilterComponentType(col)) {
+            <!-- Visibility rules live in showFilterButton(): hidden when the column
+                 supplies its own floating-filter component (that component owns
+                 filtering and writes a different model shape), except for date
+                 columns, whose popup is the only place the Before / After / Between
+                 operators fit. Always hidden when suppressFilterButton is set. -->
+            @if (showFilterButton(col)) {
               <button
                 type="button"
                 class="gg-filter-btn"
@@ -682,7 +683,7 @@
       <label class="gg-filter-row">
         <select [ngModel]="draftFilter().type" (ngModelChange)="setDraftFilterType($event)">
           @for (op of filterOpsFor(filterCol); track op) {
-            <option [ngValue]="op">{{ filterOpLabel(op) }}</option>
+            <option [ngValue]="op">{{ filterOpLabel(op, filterCol) }}</option>
           }
         </select>
       </label>
