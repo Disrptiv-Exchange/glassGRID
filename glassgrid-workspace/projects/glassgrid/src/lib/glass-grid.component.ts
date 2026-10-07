@@ -371,12 +371,24 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
   readonly suppressRowVirtualisation = input(false);
 
   /**
-   * At or below this many rows the grid renders every row and skips windowing
-   * entirely. Set to twice the largest page size the pagination selector offers
-   * (100), so every paginated grid renders in full and only genuinely large
-   * client-side sets pay for virtualisation. See visibleRowRange.
+   * Default for `virtualisationRowThreshold`. Twice the largest page size the
+   * pagination selector offers (100), so every paginated grid renders in full and
+   * only genuinely large client-side sets pay for virtualisation.
    */
   private static readonly VIRTUALISATION_ROW_THRESHOLD = 200;
+
+  /**
+   * At or below this many rows the grid renders every row and skips windowing
+   * entirely. See visibleRowRange for why rendering small sets in full is the
+   * better trade.
+   *
+   * Overridable because the 200 default assumes a page size of 100 or less. A grid
+   * whose selector offers 200 rows per page lands exactly ON the default and so
+   * never windows: every row stays live in the DOM and each selection change
+   * re-renders all of them. Such a grid can lower this to opt its pages back into
+   * windowing. Leaving it alone preserves the existing behaviour everywhere else.
+   */
+  readonly virtualisationRowThreshold = input(GlassGridComponent.VIRTUALISATION_ROW_THRESHOLD);
   readonly suppressColumnVirtualisation = input(true);
   readonly print = input(false);
 
@@ -1020,10 +1032,12 @@ export class GlassGridComponent<TRow extends object = Record<string, unknown>> i
     // removes the failure mode rather than narrowing the window in which it
     // happens, which is what buffer tuning does.
     //
-    // 200 is twice the largest page size, so every paginated grid lands here.
-    // Genuinely large client-side sets stay virtualised and keep the buffer logic
-    // below, where the trade is worth making.
-    if (total <= GlassGridComponent.VIRTUALISATION_ROW_THRESHOLD) return { start: 0, end: total };
+    // The 200 default is twice the largest page size the selector offers, so every
+    // paginated grid lands here. Genuinely large client-side sets stay virtualised
+    // and keep the buffer logic below, where the trade is worth making. A grid
+    // paging 200 rows at a time can lower `virtualisationRowThreshold` to opt back
+    // into windowing.
+    if (total <= this.virtualisationRowThreshold()) return { start: 0, end: total };
     const vh = this.viewportHeight();
     const top = this.scrollTop();
 
